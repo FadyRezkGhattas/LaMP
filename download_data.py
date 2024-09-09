@@ -106,6 +106,15 @@ for i, url in enumerate(urls):
     else:
         print(f'Failed to download {url} (status code: {response.status_code})')
 
+# Move new LaMP_2 data (personalized movie tagging) to override deprecataed LaMP-2 version (personalized news categorization)
+for dataset_split in ['user', 'time']:
+    lamp_2_dir = f'{base_target_dir}/{dataset_split}/LaMP_2'
+    files = ['dev_outputs.json', 'dev_questions.json', 'test_questions.json', 'train_questions.json', 'train_outputs.json']
+    for file in files:
+        src_path = lamp_2_dir + f'/new/{file}'
+        dest = lamp_2_dir + f'/{file}'
+        shutil.move(src_path, dest)
+
 # Step 5: Prepare avocado dataset (TODO)
 # avocado_files_dir = ""
 # extract_addr = ""
