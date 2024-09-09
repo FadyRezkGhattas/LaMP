@@ -19,6 +19,22 @@ python data/avocado/create_avocado_dataset.py \
     --input_question_file_test \*The address to the test_questions.json file we provided in LaMP*\
 ```
 
+### Pre-Processing Ranks
+The first step is to sort items in each user profile based on the input for the task:
+```
+python rank_profiles.py \
+    --input_data_addr /*input questions for one of the LaMP tasks*/ \
+    --output_ranking_addr /*output address for the generated ranking file*/ \
+    --task /*name of the task [LaMP-1, LaMP-2, ..., LaMP-7]*/ \
+    --ranker /*the ranking model to be used [bm25, contriever, recency]*/ \
+    [optional] --use_date /*the batch size for ranking*/ \
+    [optional] --use_date \ /*if used, it adds time to the text of each profile item*/
+    [optional] --contriever_checkpoint /*address to the Contriever checkpoint to be used*/ \
+```
+Alernatively, we provide a script ``ranking_data.sh``. The script runs all ranking pre-processing commands for train, dev, and test questions for all LaMP tasks for both user and time splits. The best performing ranker is used per task as provied in tables 6 and 8 in the original [LaMP paper](https://arxiv.org/abs/2304.11406). This is using contriever for all tasks except (1) LaMP-3T and LaMP-4T using Recency, and (2) LaMP-5U, and LaMP-6U using BM25.
+
+If multiple GPUs are available, the script commands can be manually pushed into different devices.
+
 ## Credit
 [LaMP: When Large Language Models Meet Personalization](https://arxiv.org/abs/2304.11406)
 
