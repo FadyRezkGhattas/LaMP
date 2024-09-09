@@ -3,17 +3,47 @@ import os
 from bs4 import BeautifulSoup
 from tqdm import tqdm
 
-# Step 2: Send a request to the webpage
+import zipfile
+import glob
+import shutil
+import json
+import mailparser
+import argparse
+
+# Add utilities
+def empty_dir(directory_path):
+    for filename in os.listdir(directory_path):
+        file_path = os.path.join(directory_path, filename)
+        try:
+            # if the current item is a file, remove it
+            if os.path.isfile(file_path):
+                os.unlink(file_path)
+            # if the current item is a directory, remove it recursively using shutil.rmtree()
+            elif os.path.isdir(file_path):
+                shutil.rmtree(file_path)
+        except Exception as e:
+            print(f'Failed to delete {file_path}. Reason: {e}')
+
+def process_file(file_addr):
+    message = ""
+    id = os.path.basename(file_addr)
+    mail = mailparser.parse_from_file(file_addr)
+    subject = mail.subject
+    message = mail.body
+    return id, {"subject" : subject, "content" : message.strip()}
+
+
+# Step 1: Send a request to the webpage
 url = 'https://lamp-benchmark.github.io/download'
 response = requests.get(url)
 
-# Step 3: Parse the HTML content
+# Step 2: Parse the HTML content
 soup = BeautifulSoup(response.content, 'html.parser')
 
-# Step 4: Find all anchor tags
+# Step 3: Find all anchor tags
 anchors = soup.find_all('a')
 
-# Step 5: Extract href attribute from each anchor tag
+# Step 4: Extract href attribute from each anchor tag
 urls = []
 for anchor in anchors:
     href = anchor.get('href')
@@ -56,6 +86,11 @@ for i, url in enumerate(urls):
         
         # Create a progress bar
         progress_bar = tqdm(total=total_size, unit='B', unit_scale=True, desc=filename)
+
+        # Check if file exists, and skip it if so
+        file_exists = os.path.isfile(os.path.join(target_dir, filename))
+        if file_exists:
+            print(f'{filename} already exists.')
         
         # Save the file to the target directory with progress bar
         filepath = os.path.join(target_dir, filename)
@@ -69,3 +104,99 @@ for i, url in enumerate(urls):
         print(f'Successfully downloaded {filename}')
     else:
         print(f'Failed to download {url} (status code: {response.status_code})')
+
+# Step 5: Prepare avocado dataset (TODO)
+# avocado_files_dir = ""
+# extract_addr = ""
+# output_dir = ""
+# input_question_file_train = ""
+# input_question_file_dev = ""
+# input_question_file_test = ""
+# time_based_separation = ""
+
+# with open(input_question_file_train) as file:
+#     input_questions_train = json.load(file)
+# with open(input_question_file_dev) as file:
+#     input_questions_dev = json.load(file)
+# with open(input_question_file_test) as file:
+#     input_questions_test = json.load(file)
+
+# all_required_files = set()
+# for sample in input_questions_train + input_questions_dev + input_questions_test:
+#     all_required_files.add(sample['input'])
+#     for p in sample['profile']:
+#         all_required_files.add(p['text'])
+    
+# zip_addrs = glob.glob(os.path.join(avocado_files_dir, "*"))
+# os.makedirs(extract_addr, exist_ok=True)
+# database = dict()
+# for zip_addr in tqdm.tqdm(zip_addrs):
+#     with zipfile.ZipFile(zip_addr, 'r') as zobj:
+#         zobj.extractall(path = extract_addr)
+#         extracted_files_addrs = glob.glob(os.path.join(extract_addr, "*/*"))
+#         for file_addr in extracted_files_addrs:
+#             if os.path.basename(file_addr) in all_required_files:
+#                 id, obj = process_file(file_addr)
+#                 database[id] = obj
+#     empty_dir(extract_addr)
+    
+# os.makedirs(output_dir, exist_ok=True)
+
+# inps_train, outs_train = [], []
+# for sample in input_questions_train:
+#     id = sample['input']
+#     sample['input'] = f"Generate a subject for the following email: {database[id]['content']}"
+#     sample['output'] = database[id]['subject']
+#     for p in sample['profile']:
+#         pid = p['text']
+#         p['text'] = database[pid]['content']
+#         p['title'] = database[pid]['subject']
+#     if time_based_separation:
+#         inps_train.append({"id" : sample['id'], "input" : sample['input'], "profile" : sample['profile'], "user_id" : sample['user_id']})
+#     else:
+#         inps_train.append({"id" : sample['id'], "input" : sample['input'], "profile" : sample['profile']})
+#     outs_train.append({"id" : sample['id'], "output" : sample['output']})
+
+# inps_dev, outs_dev = [], []
+# for sample in input_questions_dev:
+#     id = sample['input']
+#     sample['input'] = f"Generate a subject for the following email: {database[id]['content']}"
+#     sample['output'] = database[id]['subject']
+#     for p in sample['profile']:
+#         pid = p['text']
+#         p['text'] = database[pid]['content']
+#         p['title'] = database[pid]['subject']
+#     if time_based_separation:
+#         inps_dev.append({"id" : sample['id'], "input" : sample['input'], "profile" : sample['profile'], "user_id" : sample['user_id']})
+#     else:
+#         inps_dev.append({"id" : sample['id'], "input" : sample['input'], "profile" : sample['profile']})
+#     outs_dev.append({"id" : sample['id'], "output" : sample['output']})
+
+    
+# inps_test= []
+# for sample in input_questions_test:
+#     id = sample['input']
+#     sample['input'] = f"Generate a subject for the following email: {database[id]['content']}"
+#     for p in sample['profile']:
+#         pid = p['text']
+#         p['text'] = database[pid]['content']
+#         p['title'] = database[pid]['subject']
+#     if time_based_separation:
+#         inps_test.append({"id" : sample['id'], "input" : sample['input'], "profile" : sample['profile'], "user_id" : sample['user_id']})
+#     else:
+#         inps_test.append({"id" : sample['id'], "input" : sample['input'], "profile" : sample['profile']})
+        
+# with open(os.path.join(output_dir, "train_questions.json"), "w") as file:
+#     json.dump(inps_train, file)
+
+# with open(os.path.join(output_dir, "train_outputs.json"), "w") as file:
+#     json.dump({"task":"LaMP_6","golds":outs_train}, file)
+
+# with open(os.path.join(output_dir, "dev_questions.json"), "w") as file:
+#     json.dump(inps_dev, file)
+
+# with open(os.path.join(output_dir, "dev_outputs.json"), "w") as file:
+#     json.dump({"task":"LaMP_6","golds":outs_dev}, file)
+
+# with open(os.path.join(output_dir, "test_questions.json"), "w") as file:
+#     json.dump({"task":"LaMP_6","golds":inps_test}, file)
