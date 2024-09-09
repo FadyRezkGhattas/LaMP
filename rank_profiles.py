@@ -9,10 +9,9 @@ import argparse
 
 parser = argparse.ArgumentParser()
 
-parser.add_argument("--input_data_addr", required = True)
-parser.add_argument("--output_ranking_addr", required = True)
-parser.add_argument("--task", required = True)
-parser.add_argument("--ranker", required = True)
+parser.add_argument("--input_data_addr", default="./data_raw/user/LaMP_1/train_questions.json")
+parser.add_argument("--task", default="LaMP-1")
+parser.add_argument("--ranker", default="contriever")
 parser.add_argument("--batch_size", type = int, default=16)
 parser.add_argument("--use_date", action='store_true')
 parser.add_argument("--contriever_checkpoint", default="facebook/contriever")
@@ -109,6 +108,21 @@ def classification_movies_query_corpus_maker(inp, profile, use_date):
     ids = [x['id'] for x in profile]
     return corpus, query, ids
 
+def input_data_addr_to_output_data_addr(path):
+    # Find the position of the last '/' character
+    last_slash_index = path.rfind('/')
+
+    # Split the path into two parts: everything before the last '/'
+    before_last_slash = path[:last_slash_index + 1]
+
+    # Get the filename (everything after the last '/')
+    filename = path[last_slash_index + 1:]
+
+    # Replace the filename with the new filename
+    new_filename = f"{before_last_slash}{filename.split('.')[0]}_rank{path[path.rfind('.'):]}"
+
+    return new_filename
+
 
 if __name__ == "__main__":
 
@@ -153,7 +167,7 @@ if __name__ == "__main__":
         data['profile'] = randked_profile
 
         rank_dict[data['id']] = [x['id'] for x in randked_profile]
-
+        break
     
-    with open(opts.output_ranking_addr, "w") as file:
+    with open(input_data_addr_to_output_data_addr(opts.input_data_addr), "w") as file:
         json.dump(rank_dict, file)
