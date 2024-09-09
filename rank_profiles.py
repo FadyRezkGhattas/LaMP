@@ -9,8 +9,8 @@ import argparse
 
 parser = argparse.ArgumentParser()
 
-parser.add_argument("--input_data_addr", default="./data_raw/user/LaMP_1/train_questions.json")
-parser.add_argument("--task", default="LaMP-1")
+parser.add_argument("--input_data_addr", default="./data_raw/user/LaMP_2/train_questions.json")
+parser.add_argument("--task", default="LaMP-2")
 parser.add_argument("--ranker", default="contriever")
 parser.add_argument("--batch_size", type = int, default=16)
 parser.add_argument("--use_date", action='store_true')
@@ -143,7 +143,7 @@ if __name__ == "__main__":
         elif task == "LaMP-3":
             corpus, query, ids = classification_review_query_corpus_maker(inp, profile, opts.use_date)
         elif task == "LaMP-2":
-            corpus, query = classification_movies_query_corpus_maker(inp, profile, opts.use_date)
+            corpus, query, ids = classification_movies_query_corpus_maker(inp, profile, opts.use_date)
         elif task == "LaMP-4":
             corpus, query, ids = generation_news_query_corpus_maker(inp, profile, opts.use_date)
         elif task == "LaMP-5":
