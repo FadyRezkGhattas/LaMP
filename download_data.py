@@ -115,6 +115,23 @@ for dataset_split in ['user', 'time']:
         dest = lamp_2_dir + f'/{file}'
         shutil.move(src_path, dest)
 
+# first sample in the LaMP-2-U task is corrupted so remove it from questions and outputs
+# questions
+split_name = f'./data_raw/user/LaMP_2/'
+file_path = split_name + 'dev_questions.json'
+with open(file_path) as file:
+    dataset = json.load(file)
+dataset = dataset[1:]
+with open(file_path, 'w') as f:
+    json.dump(dataset, f)
+# outputs
+file_path = split_name + 'dev_outputs.json'
+with open(file_path) as file:
+    dataset = json.load(file)
+dataset['golds'] = dataset['golds'][1:]
+with open(file_path, 'w') as f:
+    json.dump(dataset, f)
+
 # Step 5: Prepare avocado dataset (TODO)
 # avocado_files_dir = ""
 # extract_addr = ""
