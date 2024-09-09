@@ -12,7 +12,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--input_data_addr", default="./data_raw/user/LaMP_1/train_questions.json")
 parser.add_argument("--task", default="LaMP-1")
 parser.add_argument("--ranker", default="contriever")
-parser.add_argument("--batch_size", type = int, default=256)
+parser.add_argument("--batch_size", type = int, default=16)
 parser.add_argument("--use_date", action='store_true')
 parser.add_argument("--contriever_checkpoint", default="facebook/contriever")
 
