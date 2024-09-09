@@ -51,7 +51,7 @@ for anchor in anchors:
         urls.append(href)
 
 # Target directory to save the downloaded JSON files
-base_target_dir = 'raw_data'
+base_target_dir = 'data_raw'
 
 # Create the base target directory if it doesn't exist
 os.makedirs(base_target_dir, exist_ok=True)
