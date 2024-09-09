@@ -91,6 +91,7 @@ for i, url in enumerate(urls):
         file_exists = os.path.isfile(os.path.join(target_dir, filename))
         if file_exists:
             print(f'{filename} already exists.')
+            continue
         
         # Save the file to the target directory with progress bar
         filepath = os.path.join(target_dir, filename)
