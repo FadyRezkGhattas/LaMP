@@ -163,3 +163,5 @@ cython_debug/
 playground.ipynb
 data_raw
 launch.json
+cache
+experiments
