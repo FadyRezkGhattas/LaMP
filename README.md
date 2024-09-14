@@ -31,10 +31,29 @@ python rank_profiles.py \
     [optional] --use_date \ /*if used, it adds time to the text of each profile item*/
     [optional] --contriever_checkpoint /*address to the Contriever checkpoint to be used*/ \
 ```
-Alernatively, we provide a script ``ranking_data.sh``. The script runs all ranking pre-processing commands for train, dev, and test questions for all LaMP tasks for both user and time splits. The best performing ranker is used per task as provied in tables 6 and 8 in the original [LaMP paper](https://arxiv.org/abs/2304.11406). This is using contriever for all tasks except (1) LaMP-3T and LaMP-4T using Recency, and (2) LaMP-5U, and LaMP-6U using BM25.
+Alernatively, we provide a script ``scripts/ranking_data.sh``. The script runs all ranking pre-processing commands for train, dev, and test questions for all LaMP tasks for both user and time splits. The best performing ranker is used per task as provied in tables 6 and 8 in the original [LaMP paper](https://arxiv.org/abs/2304.11406). This is using contriever for all tasks except (1) LaMP-3T and LaMP-4T using Recency, and (2) LaMP-5U, and LaMP-6U using BM25.
 
 If multiple GPUs are available, the script commands can be manually pushed into different devices.
 
+This can be run as:
+```
+cd LaMP
+bash scripts/ranking_data.sh
+```
+
+After that, use the following script to sort the profiles in the dataset based on the ranking file:
+
+```
+python utils/merge_with_rank.py \
+    --lamp_questions_addr /*address to the LaMP task inputs file*/ \
+    --lamp_output_addr /*address to the LaMP task outputs file*/ \
+    --profile_ranking_addr /*address to the generated ranking file from the previous script*/
+```
+Similarily, we provided a script called ```scripts/merge_data.sh``` to run the previous script for all LaMP tasks.
+```
+cd LaMP
+bash scripts/merging_data.sh
+```
 ## Credit
 [LaMP: When Large Language Models Meet Personalization](https://arxiv.org/abs/2304.11406)
 

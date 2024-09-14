@@ -1,8 +1,10 @@
 import json 
 import argparse
 
+from tqdm import tqdm
+
 def merge(inps, outs, ranks):
-    for inp in inps:
+    for inp in tqdm(inps, desc="Merging inputs"):
         for o in outs:
             if o['id'] == inp['id']:
                 output = o['output']
@@ -21,7 +23,6 @@ parser = argparse.ArgumentParser()
 
 parser.add_argument("--lamp_questions_addr", required = True)
 parser.add_argument("--lamp_output_addr", required = True)
-parser.add_argument("--merged_output_addr", required = True)
 parser.add_argument("--profile_ranking_addr", default="")
 
 if __name__ == "__main__":
@@ -29,7 +30,7 @@ if __name__ == "__main__":
     q_addr = opts.lamp_questions_addr
     o_addr = opts.lamp_output_addr
     rank_addr = opts.profile_ranking_addr
-    res_addr = opts.merged_output_addr
+    res_addr = opts.lamp_questions_addr.replace("questions", "questions_merged")
 
     with open(q_addr) as qfile:
         inp = json.load(qfile)
@@ -46,7 +47,5 @@ if __name__ == "__main__":
                 rank[data['id']].append(item['id'])
 
     with open(res_addr, "w") as resfile:
-        res = merge(inp, out, rank)
+        res = merge(inp, out["golds"], rank)
         json.dump(res, resfile, indent=4)
-
-
