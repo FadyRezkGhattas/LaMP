@@ -6,19 +6,20 @@ from data.datasets import get_all_labels, GeneralSeq2SeqProfileDataset, create_p
 from prompts.singular_prompts import create_prompt_generator
 from peft import get_peft_model, PromptTuningConfig
 import json
+from utils import CSVLogger, opts_to_exp_name
 
 parser = argparse.ArgumentParser()
-
+parser.add_argument("--num_tasks", type=int, default=20)
 parser.add_argument("--data_addr", default="./data_raw/user/LaMP_2/train_questions_merged.json")
 parser.add_argument("--model_name", default='google/flan-t5-base')
-parser.add_argument("--num_virtual_tokens", default=2)
+parser.add_argument("--num_virtual_tokens", type=int, default=2)
 parser.add_argument("--task", default='LaMP-2')
 parser.add_argument("--output_dir", default='./experiments')
 parser.add_argument("--generation_max_length", type = int, default = 128)
 parser.add_argument("--per_device_batch_size", type = int, default = 16)
-parser.add_argument("--learning_rate", type = float, default = 5e-5)
+parser.add_argument("--learning_rate", type = float, default = 5e-1)
 parser.add_argument("--weight_decay", type = float, default = 0.0001)
-parser.add_argument("--num_train_epochs", type = int, default = 10)
+parser.add_argument("--num_train_epochs", type = int, default = 40)
 parser.add_argument("--lr_scheduler_type", default = "linear")
 parser.add_argument("--warmup_ratio", type = float, default = 0.05)
 parser.add_argument("--generation_num_beams", type = int, default = 4)
@@ -37,6 +38,11 @@ if __name__ == "__main__":
     with open(opts.data_addr) as f:
         data = json.load(f)
 
+    # helper objects
+    exp_name = opts_to_exp_name(opts)
+    logger = CSVLogger(opts.output_dir, exp_name)
+
+    task_counter = 0
     for user_id in range(len(data)):
         # Create datasets and metrics
         task = opts.task
@@ -49,7 +55,6 @@ if __name__ == "__main__":
             train_dataset, eval_dataset = train_val_split(user_dataset, val_size=0.20)
             compute_metrics = create_metric_f1_accuracy(tokenizer = tokenizer, all_labels = labels)
             best_metric = "accuracy"
-            prompt_init = "personalized movie tagging"
         
         train_dataset = convert_to_hf_dataset(train_dataset, cache_dir = opts.cache_dir).map(create_preprocessor(tokenizer = tokenizer, max_length = tokenizer.model_max_length), batched=True)
         eval_dataset = convert_to_hf_dataset(eval_dataset, cache_dir = opts.cache_dir).map(create_preprocessor(tokenizer = tokenizer, max_length = tokenizer.model_max_length), batched=True)
@@ -58,9 +63,7 @@ if __name__ == "__main__":
         peft_config = PromptTuningConfig(
             task_type="SEQ_2_SEQ_LM",
             num_virtual_tokens=opts.num_virtual_tokens,
-            prompt_tuning_init="TEXT",
-            prompt_tuning_init_text=prompt_init,
-            tokenizer_name_or_path=opts.model_name
+            prompt_tuning_init="RANDOM"
         )
         model = get_peft_model(model, peft_config)
         model.print_trainable_parameters()
@@ -101,7 +104,7 @@ if __name__ == "__main__":
         )
 
         trainer.train()
-        print("#"*80)
-        train_result = trainer.state.log_history[-2]
-        print(train_result)
-        break
+        logger.log(trainer)
+        task_counter += 1
+        if task_counter == opts.num_tasks:
+            break
