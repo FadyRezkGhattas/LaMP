@@ -1,7 +1,8 @@
 from torch.utils.data import Dataset
 import json
 import datasets
-from torch.utils.data import random_split
+import math
+import torch
 
 def get_all_labels(task):
     if task == "LaMP-1":
@@ -79,9 +80,19 @@ def train_val_split(dataset, val_size):
     Returns:
         tuple: A tuple containing the training dataset and the validation dataset.
     """
-    # Split the data into training and validation sets
-    train_size = int((1 - val_size) * len(dataset))
-    train_dataset, val_dataset = random_split(dataset, [train_size, len(dataset) - train_size])
+    # Calculate the number of samples in each set
+    num_samples = len(dataset)
+    
+    # Ensure train_size is an integer by rounding up if necessary
+    train_size = math.ceil(num_samples * (1 - val_size))
+    
+    # Generate fixed indices for splitting
+    indices = list(range(num_samples))
+    train_indices, val_indices = indices[:train_size], indices[train_size:]
+    
+    # Split the data into training and validation sets using torch.utils.data.Subset
+    train_dataset = torch.utils.data.Subset(dataset, train_indices)
+    val_dataset = torch.utils.data.Subset(dataset, val_indices)
     
     return train_dataset, val_dataset
 
