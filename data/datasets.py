@@ -1,7 +1,7 @@
 from torch.utils.data import Dataset
 import json
 import datasets
-import torch
+from torch.utils.data import random_split
 
 def get_all_labels(task):
     if task == "LaMP-1":
@@ -67,6 +67,23 @@ def get_io_keys(task):
         return None # TODO
     elif task == "LaMP-7":
         return None # TODO
+
+def train_val_split(dataset, val_size):
+    """
+    Splits the input dataset into training and validation datasets.
+
+    Args:
+        dataset (PyTorch Dataset): The input dataset.
+        val_size (float): The proportion of data to be used for validation.
+
+    Returns:
+        tuple: A tuple containing the training dataset and the validation dataset.
+    """
+    # Split the data into training and validation sets
+    train_size = int((1 - val_size) * len(dataset))
+    train_dataset, val_dataset = random_split(dataset, [train_size, len(dataset) - train_size])
+    
+    return train_dataset, val_dataset
 
 class GeneralSeq2SeqProfileDataset(Dataset):
     def __init__(self, task, create_prompt, val=False, user_id=None, data=None, data_addr=None) -> None:
