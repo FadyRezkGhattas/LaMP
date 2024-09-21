@@ -15,7 +15,7 @@ parser.add_argument("--validation_data", default="./data_raw/user/LaMP_2/dev_que
 parser.add_argument("--test_data", default="")
 parser.add_argument("--model_name", default='google/flan-t5-base')
 parser.add_argument("--task", default='LaMP-2')
-parser.add_argument("--output_dir", default='./experiments')
+parser.add_argument("--output_dir", default='./experiments/LaMP-2/reproduce_baseline')
 parser.add_argument("--retriever", default = "bm25")
 parser.add_argument("--use_profile", action="store_true", help="Use profile", default=True)
 parser.add_argument("--is_ranked", action="store_true", help="Enable ranked retrieval", default=True)
@@ -137,7 +137,7 @@ if __name__ == "__main__":
         metric_for_best_model = best_metric,
         greater_is_better = greater_is_better,
         save_total_limit=1,
-        save_steps=0
+        save_steps=50
     )
 
     trainer = Seq2SeqTrainer(
