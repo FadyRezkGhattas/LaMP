@@ -152,3 +152,31 @@ class GeneralSeq2SeqProfileDataset(Dataset):
             return len(self.data['profile'])
         else:
             return 1
+
+class GeneralSeq2SeqDataset(Dataset):
+
+    def __init__(self, data_addr, use_profile, task, create_prompt = None) -> None:
+        super().__init__()
+        with open(data_addr) as file:
+            self.data = json.load(file)
+        self.use_profile = use_profile
+        self.task = task
+        assert not (use_profile ^ (create_prompt != None)), "You should provide a prompt maker function when you use profile"
+        self.create_prompt = create_prompt
+
+    def __getitem__(self, index):
+        if self.use_profile:
+            return {
+                "id" : self.data[index]['id'],
+                "source" : self.create_prompt(self.data[index]['input'], self.data[index]['profile'], self.task),
+                "target" : self.data[index]['output']
+            }
+        else:
+            return {
+                "id" : self.data[index]['id'],
+                "source" : self.data[index]['input'],
+                "target" : self.data[index]['output']
+            }
+    
+    def __len__(self):
+        return len(self.data)
