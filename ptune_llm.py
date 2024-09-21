@@ -17,11 +17,11 @@ parser.add_argument("--num_virtual_tokens", type=int, default=2)
 parser.add_argument("--task", default='LaMP-2')
 parser.add_argument("--output_dir", default='./experiments')
 parser.add_argument("--generation_max_length", type = int, default = 128)
-parser.add_argument("--per_device_batch_size", type = int, default = 16)
-parser.add_argument("--learning_rate", type = float, default = 5e-1)
+parser.add_argument("--per_device_batch_size", type = int, default = 32)
+parser.add_argument("--learning_rate", type = float, default = 5e-5)
 parser.add_argument("--weight_decay", type = float, default = 0.0001)
-parser.add_argument("--num_train_epochs", type = int, default = 10)
-parser.add_argument("--lr_scheduler_type", default = "constant")
+parser.add_argument("--num_train_epochs", type = int, default = 1)
+parser.add_argument("--lr_scheduler_type", default = "linear")
 parser.add_argument("--warmup_ratio", type = float, default = 0.05)
 parser.add_argument("--generation_num_beams", type = int, default = 4)
 parser.add_argument("--gradient_accumulation_steps", type = int, default = 1)
@@ -37,7 +37,7 @@ if __name__ == "__main__":
 
     # helper objects
     exp_name = opts_to_exp_name(opts)
-    opts.output_dir = os.path.join(opts.output_dir, exp_name)
+    opts.output_dir = os.path.join(opts.output_dir, opts.task, exp_name)
     logger = CSVLogger(opts.output_dir, exp_name)
 
     task_counter = 0
@@ -46,7 +46,7 @@ if __name__ == "__main__":
         model = AutoModelForSeq2SeqLM.from_pretrained(opts.model_name, cache_dir=opts.cache_dir)
         tokenizer = AutoTokenizer.from_pretrained(opts.model_name, cache_dir=opts.cache_dir)
         collator = DataCollatorForSeq2Seq(tokenizer = tokenizer, model = model)
-        
+
         # Create datasets and metrics
         task = opts.task
         prompt_generator = create_prompt_generator(tokenizer)
@@ -55,7 +55,7 @@ if __name__ == "__main__":
             user_dataset, labels = GeneralSeq2SeqProfileDataset(task, prompt_generator, data=data[user_id]), get_all_labels(task)
             if len(user_dataset) < 60:
                 continue
-            train_dataset, eval_dataset = train_val_split(user_dataset, val_size=0.20)
+            train_dataset, eval_dataset = train_val_split(user_dataset, val_size=0.2)
             compute_metrics = create_metric_f1_accuracy(tokenizer = tokenizer, all_labels = labels)
             best_metric = "accuracy"
         
@@ -84,7 +84,7 @@ if __name__ == "__main__":
             weight_decay = opts.weight_decay,
             num_train_epochs = opts.num_train_epochs,
             lr_scheduler_type = opts.lr_scheduler_type,
-            # warmup_ratio = opts.warmup_ratio,
+            warmup_ratio = opts.warmup_ratio,
             generation_num_beams = opts.generation_num_beams,
             predict_with_generate = True,
             save_strategy = "epoch",
@@ -95,7 +95,7 @@ if __name__ == "__main__":
             metric_for_best_model = best_metric,
             greater_is_better = greater_is_better,
             save_total_limit=1,
-            save_steps=0
+            save_steps=50,
         )
 
         trainer = Seq2SeqTrainer(
