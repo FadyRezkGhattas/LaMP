@@ -10,15 +10,15 @@ import json
 
 parser = argparse.ArgumentParser()
 
-parser.add_argument("--train_data", required = True)
-parser.add_argument("--validation_data", required = True)
+parser.add_argument("--train_data", default="./data_raw/user/LaMP_2/train_questions_merged.json")
+parser.add_argument("--validation_data", default="./data_raw/user/LaMP_2/dev_questions_merged.json")
 parser.add_argument("--test_data", default="")
-parser.add_argument("--model_name", required = True)
-parser.add_argument("--task", required = True)
-parser.add_argument("--output_dir", required = True)
+parser.add_argument("--model_name", default='google/flan-t5-base')
+parser.add_argument("--task", default='LaMP-2')
+parser.add_argument("--output_dir", default='./experiments')
 parser.add_argument("--retriever", default = "bm25")
-parser.add_argument("--use_profile", action = "store_true")
-parser.add_argument("--is_ranked", action = "store_true")
+parser.add_argument("--use_profile", action="store_true", help="Use profile", default=True)
+parser.add_argument("--is_ranked", action="store_true", help="Enable ranked retrieval", default=True)
 parser.add_argument("--max_length", type = int, default = 256)
 parser.add_argument("--generation_max_length", type = int, default = 128)
 parser.add_argument("--per_device_batch_size", type = int, default = 16)
@@ -28,7 +28,7 @@ parser.add_argument("--num_train_epochs", type = int, default = 10)
 parser.add_argument("--lr_scheduler_type", default = "linear")
 parser.add_argument("--warmup_ratio", type = float, default = 0.05)
 parser.add_argument("--generation_num_beams", type = int, default = 4)
-parser.add_argument("--num_retrieved", type = int, required=True)
+parser.add_argument("--num_retrieved", type = int, default=16)
 parser.add_argument("--gradient_accumulation_steps", type = int, default = 1)
 parser.add_argument("--cache_dir", default = "./cache")
 
@@ -135,7 +135,9 @@ if __name__ == "__main__":
         generation_max_length = opts.generation_max_length,
         load_best_model_at_end = True,
         metric_for_best_model = best_metric,
-        greater_is_better = greater_is_better
+        greater_is_better = greater_is_better,
+        save_total_limit=1,
+        save_steps=0
     )
 
     trainer = Seq2SeqTrainer(
