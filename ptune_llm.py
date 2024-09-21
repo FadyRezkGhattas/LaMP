@@ -17,7 +17,7 @@ parser.add_argument("--num_virtual_tokens", type=int, default=2)
 parser.add_argument("--task", default='LaMP-2')
 parser.add_argument("--output_dir", default='./experiments')
 parser.add_argument("--generation_max_length", type = int, default = 128)
-parser.add_argument("--per_device_batch_size", type = int, default = 32)
+parser.add_argument("--per_device_batch_size", type = int, default = 16)
 parser.add_argument("--learning_rate", type = float, default = 5e-5)
 parser.add_argument("--weight_decay", type = float, default = 0.0001)
 parser.add_argument("--num_train_epochs", type = int, default = 1)
@@ -96,6 +96,7 @@ if __name__ == "__main__":
             greater_is_better = greater_is_better,
             save_total_limit=1,
             save_steps=50,
+            report_to="tensorboard"
         )
 
         trainer = Seq2SeqTrainer(
