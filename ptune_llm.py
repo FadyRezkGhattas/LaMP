@@ -10,6 +10,7 @@ import json
 from utils import CSVLogger, opts_to_exp_name
 
 parser = argparse.ArgumentParser()
+parser.add_argument('--exp_prefix', type=str, default="")
 parser.add_argument("--num_tasks", type=int, default=20)
 parser.add_argument("--data_addr", default="./data_raw/user/LaMP_2/train_questions_merged.json")
 parser.add_argument("--model_name", default='google/flan-t5-base')
@@ -20,7 +21,7 @@ parser.add_argument("--generation_max_length", type = int, default = 128)
 parser.add_argument("--per_device_batch_size", type = int, default = 16)
 parser.add_argument("--learning_rate", type = float, default = 5e-5)
 parser.add_argument("--weight_decay", type = float, default = 0.0001)
-parser.add_argument("--num_train_epochs", type = int, default = 1)
+parser.add_argument("--num_train_epochs", type = int, default = 10)
 parser.add_argument("--lr_scheduler_type", default = "linear")
 parser.add_argument("--warmup_ratio", type = float, default = 0.05)
 parser.add_argument("--generation_num_beams", type = int, default = 4)
@@ -36,7 +37,7 @@ if __name__ == "__main__":
         data = json.load(f)
 
     # helper objects
-    exp_name = opts_to_exp_name(opts)
+    exp_name = opts.exp_prefix + opts_to_exp_name(opts)
     opts.output_dir = os.path.join(opts.output_dir, opts.task, exp_name)
     logger = CSVLogger(opts.output_dir, exp_name)
 
