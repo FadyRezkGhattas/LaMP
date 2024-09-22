@@ -1,5 +1,10 @@
 # PEFT For Large Language Models Personalization (LaMP)
 
+## Environment Preparation
+TODO: flesh out
+- Installing requirements.txt
+- Install deepspeed, and accelearte to use multi-gpu training if required
+
 ## Data
 
 ### LaMP Tasks 1-5 & 7
@@ -54,6 +59,12 @@ Similarily, we provided a script called ```scripts/merge_data.sh``` to run the p
 cd LaMP
 bash scripts/merging_data.sh
 ```
+
+## Training
+TODO: Explain files:
+- baseline reproduction with train_llm
+- continual finetuning using 1_finetune_llm
+- model zoo collection with ptune_llm
 ## Credit
 [LaMP: When Large Language Models Meet Personalization](https://arxiv.org/abs/2304.11406)
 
