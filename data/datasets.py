@@ -135,9 +135,9 @@ class GeneralSeq2SeqProfilesDataset(Dataset):
 
     def __getitem__(self, index):
         return {
-            "id" : self.data['profile'][index]['id'],
+            "id" : self.data[index]['id'],
             "source" : self.create_prompt(self.data[index][self.i_key], self.task),
-            "target" : self.data['profile'][index][self.o_key]
+            "target" : self.data[index][self.o_key]
         }
     
     def __len__(self):
