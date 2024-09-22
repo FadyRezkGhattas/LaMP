@@ -3,6 +3,7 @@ import json
 import datasets
 import math
 import torch
+from tqdm import tqdm
 
 def get_all_labels(task):
     if task == "LaMP-1":
@@ -96,6 +97,52 @@ def train_val_split(dataset, val_size):
     
     return train_dataset, val_dataset
 
+class GeneralSeq2SeqProfilesDataset(Dataset):
+    def __init__(self, task, create_prompt, data=None, data_addr=None) -> None:
+        """
+        Loads dataset from file or from address. Aggregates all user profiles as data[pomts/]
+
+        Args:
+            - **task** (str) : The name of the task.
+            - **create_prompt** (function) : Function that creates a prompt for each sample.
+            - **data** (a list of dict) : Data to use for this dataset. If given, it's assumed to be a single user.
+            - **data_addr** (str) : Path to the data file.
+        
+        Returns:
+            A dictionary containing the loaded dataset and its metadata
+
+        Example usage:
+
+            >>> from data.datasets import GeneralSeq2SeqProfilesDataset
+            >>> from prompts.prompts import create_prompt_generator
+            >>> prompt_generator = create_prompt_generator(...)
+            >>> dataset = GeneralSeq2SeqProfilesDataset('LaMP-2', prompt_generator, data_addr='./data_raw/user/LaMP_2/train_questions.json')
+        """
+        super().__init__()
+        self.task = task
+        self.create_prompt = create_prompt
+
+        assert (data is None and data_addr != '') or (data != '' and data_addr is None), "Either data or data_addr must be provided."
+        if data_addr is not None:
+            with open(data_addr) as f:
+                data = json.load(f)
+        elif data is not None:
+            data = data
+        self.data = []
+        for user in tqdm(data, desc="Mering all profiles"):
+            self.data += user['profile']
+        self.i_key, self.o_key = get_io_keys(self.task)
+
+    def __getitem__(self, index):
+        return {
+            "id" : self.data['profile'][index]['id'],
+            "source" : self.create_prompt(self.data[index][self.i_key], self.task),
+            "target" : self.data['profile'][index][self.o_key]
+        }
+    
+    def __len__(self):
+        return len(self.data)
+
 class GeneralSeq2SeqProfileDataset(Dataset):
     def __init__(self, task, create_prompt, val=False, user_id=None, data=None, data_addr=None) -> None:
         """
@@ -116,7 +163,8 @@ class GeneralSeq2SeqProfileDataset(Dataset):
 
             >>> from data.datasets import GeneralSeq2SeqProfileDataset
             >>> from prompts.prompts import create_prompt_generator as f
-            >>> dataset = GeneralSeq2SeqProfileDataset('LaMP-2', f, user_id=125, data_addr='./data_raw/user/LaMP_2/train_questions.json')
+            >>> prompt_generator = create_prompt_generator(...)
+            >>> dataset = GeneralSeq2SeqProfileDataset('LaMP-2', prompt_generator, user_id=0, data_addr='./dir/to/data')
         """
         super().__init__()
         self.task = task
