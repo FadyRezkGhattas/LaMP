@@ -5,6 +5,6 @@ torch==2.0.0
 tqdm==4.65.0
 transformers==4.27.1
 beautifulsoup4==4.12.3
-evaluate
-scikit-learn
-peft
+evaluate==0.4.3
+scikit-learn==1.5.2
+peft==0.12.0
