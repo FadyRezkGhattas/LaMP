@@ -90,14 +90,15 @@ if __name__ == "__main__":
         predict_with_generate = True,
         generation_max_length = opts.generation_max_length,
         # logging strategy
-        save_strategy = "epoch",
         logging_steps = 50,
         eval_accumulation_steps = 1,
         load_best_model_at_end = True,
         metric_for_best_model = best_metric,
         greater_is_better = greater_is_better,
         save_total_limit=1,
-        save_steps=50
+        save_strategy = "steps",
+        save_steps=500,
+        report_to="tensorboard"
     )
 
     trainer = Seq2SeqTrainer(
