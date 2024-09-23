@@ -12,7 +12,7 @@ from utils import CSVLogger, opts_to_exp_name
 parser = argparse.ArgumentParser()
 parser.add_argument('--exp_prefix', type=str, default="")
 parser.add_argument("--num_tasks", type=int, default=20)
-parser.add_argument("--data_addr", default="./data_raw/user/LaMP_2/dev_questions_merged.json")
+parser.add_argument("--data_addr", default="./data_raw/user/LaMP_2/train_questions_merged.json")
 parser.add_argument("--model_name", default='google/flan-t5-base')
 parser.add_argument("--num_virtual_tokens", type=int, default=2)
 parser.add_argument("--task", default='LaMP-2')
