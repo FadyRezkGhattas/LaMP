@@ -12,7 +12,7 @@ from utils import CSVLogger, opts_to_exp_name
 parser = argparse.ArgumentParser()
 parser.add_argument('--exp_prefix', type=str, default="")
 parser.add_argument("--num_tasks", type=int, default=20)
-parser.add_argument("--data_addr", default="./data_raw/user/LaMP_2/train_questions_merged.json")
+parser.add_argument("--data_addr", default="./data_raw/user/LaMP_2/dev_questions_merged.json")
 parser.add_argument("--model_name", default='google/flan-t5-base')
 parser.add_argument("--num_virtual_tokens", type=int, default=2)
 parser.add_argument("--task", default='LaMP-2')
@@ -30,16 +30,21 @@ parser.add_argument("--cache_dir", default = "./cache")
 
 
 if __name__ == "__main__":
-
     opts = parser.parse_args()
     
-    with open(opts.data_addr) as f:
-        data = json.load(f)
-
     # helper objects
     exp_name = opts.exp_prefix + opts_to_exp_name(opts)
     opts.output_dir = os.path.join(opts.output_dir, opts.task, exp_name)
     logger = CSVLogger(opts.output_dir, exp_name)
+
+    # Log hyperparameters
+    os.makedirs(opts.output_dir, exist_ok=True)
+    with open(os.path.join(opts.output_dir, "hyperparameters.json"), 'w') as f:
+        json.dump(vars(opts), f)
+
+    # Load all users data
+    with open(opts.data_addr) as f:
+        data = json.load(f)
 
     task_counter = 0
     for user_id in range(len(data)):
