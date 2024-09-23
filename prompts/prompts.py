@@ -255,7 +255,7 @@ def create_prompt_generator(num_retrieve, ret_type = "bm25", is_ranked = False, 
                     return create_generation_avocado_prompt(inp, selected_profs, max_len_prompt, tokenizer)
             except:
                 factor -= 0.1
-                if factor < 0:
+                if factor < 0 and num_retrieve > 0:
                     print("not possible")
                     return inp
     return prompt, contriever
