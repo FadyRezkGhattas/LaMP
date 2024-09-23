@@ -67,6 +67,8 @@ TODO: Explain files:
 - baseline reproduction with train_llm
 - continual finetuning using 1_finetune_llm
 - model zoo collection with ptune_llm
+
+P.S: when finetuning the model e2e on LaMP-2, all inputs were truncated to 128 tokens before prepending the task prompt. This is not the case for the rest of the tasks. Instead, the prompt was prepended, and truncating to fit the context window was delegated to the tokenizer.
 ## Credit
 [LaMP: When Large Language Models Meet Personalization](https://arxiv.org/abs/2304.11406)
 
