@@ -74,7 +74,8 @@ if __name__ == "__main__":
         output_dir = opts.output_dir,
         do_train = True,
         do_eval = True,
-        evaluation_strategy = "epoch",
+        evaluation_strategy = "steps",
+        eval_steps=500,
         # parallelization args
         per_device_train_batch_size = opts.per_device_batch_size,
         per_device_eval_batch_size = opts.per_device_batch_size,
