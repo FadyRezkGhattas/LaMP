@@ -110,8 +110,15 @@ if __name__ == "__main__":
             compute_metrics = compute_metrics
         )
 
+        # Get performance pre-training
+        extra_data = trainer.evaluate()
+        extra_data = {k.replace("eval", "pre_training_eval"): v for k, v in extra_data.items()}
+
+        # Train model
         trainer.train()
-        logger.log(trainer)
+
+        # Log results
+        logger.log(trainer, extra_data)
         task_counter += 1
         if task_counter == opts.num_tasks:
             break
