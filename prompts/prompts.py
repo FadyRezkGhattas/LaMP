@@ -258,4 +258,5 @@ def create_prompt_generator(num_retrieve, ret_type = "bm25", is_ranked = False, 
                 if factor < 0 and num_retrieve > 0:
                     print("not possible")
                     return inp
+                return inp
     return prompt, contriever
