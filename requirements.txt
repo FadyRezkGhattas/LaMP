@@ -8,3 +8,5 @@ beautifulsoup4==4.12.3
 evaluate==0.4.3
 peft==0.12.0
 scikit-learn
+rich
+tensorboardx
