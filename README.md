@@ -61,6 +61,8 @@ bash scripts/merging_data.sh
 ```
 
 ## Training
+Note: before launching any script with accelerate, make sure to launch it as a single process first to make sure that data is cached appropriately. Once data is cached, we can cancel the run and use accelerate.
+
 TODO: Explain files:
 - baseline reproduction with train_llm
 - continual finetuning using 1_finetune_llm
