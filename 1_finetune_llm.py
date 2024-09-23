@@ -61,12 +61,12 @@ if __name__ == "__main__":
     print("[bold magenta]Step 2: Preprocessing data...[/bold magenta]")
     print("Processing train data")
     print(f"Train Split Size: {len(train_dataset)}")
-    train_dataset = convert_to_hf_dataset(train_dataset, cache_dir = opts.cache_dir).map(create_preprocessor(tokenizer = tokenizer, max_length = opts.generation_max_length), batched=True)
+    train_dataset = convert_to_hf_dataset(train_dataset, cache_dir = opts.cache_dir).map(create_preprocessor(tokenizer = tokenizer, max_length = tokenizer.model_max_length), batched=True)
     print("Processing eval data")
     print(f"Eval Split Size: {len(eval_dataset)}")
-    eval_dataset = convert_to_hf_dataset(eval_dataset, cache_dir = opts.cache_dir).map(create_preprocessor(tokenizer = tokenizer, max_length = opts.generation_max_length), batched=True)
+    eval_dataset = convert_to_hf_dataset(eval_dataset, cache_dir = opts.cache_dir).map(create_preprocessor(tokenizer = tokenizer, max_length = tokenizer.model_max_length), batched=True)
     if opts.test_data:
-        test_dataset = convert_to_hf_dataset(test_dataset, cache_dir = opts.cache_dir).map(create_preprocessor(tokenizer = tokenizer, max_length = opts.generation_max_length), batched=True)
+        test_dataset = convert_to_hf_dataset(test_dataset, cache_dir = opts.cache_dir).map(create_preprocessor(tokenizer = tokenizer, max_length = tokenizer.model_max_length), batched=True)
     
     print("[bold magenta]Step 3: Preparing training arguments and launching experiment[/bold magenta]")
     training_args = Seq2SeqTrainingArguments(
