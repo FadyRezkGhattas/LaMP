@@ -1,13 +1,15 @@
 import os
+import json
+import argparse
+
+from peft import get_peft_model, PromptTuningConfig
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, Seq2SeqTrainer, Seq2SeqTrainingArguments
 from transformers.data.data_collator import DataCollatorForSeq2Seq
-import argparse
+
+from utils import CSVLogger, opts_to_exp_name
+from prompts.singular_prompts import create_prompt_generator
 from metrics.classification_metrics import create_metric_f1_accuracy
 from data.datasets import get_all_labels, GeneralSeq2SeqProfileDataset, create_preprocessor, convert_to_hf_dataset, train_val_split
-from prompts.singular_prompts import create_prompt_generator
-from peft import get_peft_model, PromptTuningConfig
-import json
-from utils import CSVLogger, opts_to_exp_name
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--exp_prefix', type=str, default="")
@@ -117,6 +119,8 @@ if __name__ == "__main__":
 
         # Get performance pre-training
         extra_data = trainer.evaluate()
+        print("#"*20, "Pre-Finetuning Performance", "#"*20)
+        print(extra_data)
         extra_data = {k.replace("eval", "pre_training_eval"): v for k, v in extra_data.items()}
 
         # Train model
