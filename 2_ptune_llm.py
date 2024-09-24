@@ -1,9 +1,11 @@
 import os
 import json
+import yaml
 import argparse
 from rich import print
 
-from peft import get_peft_model, PromptTuningConfig
+from lora_xs.initialization_utils import find_and_initialize
+from peft import get_peft_model, PromptTuningConfig, LoraConfig, TaskType
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, Seq2SeqTrainer, Seq2SeqTrainingArguments
 from transformers.data.data_collator import DataCollatorForSeq2Seq
 
@@ -13,19 +15,19 @@ from metrics.classification_metrics import create_metric_f1_accuracy
 from data.datasets import get_all_labels, GeneralSeq2SeqProfileDataset, create_preprocessor, convert_to_hf_dataset, train_val_split
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--exp_prefix', type=str, default="")
-parser.add_argument("--num_tasks", type=int, default=1)
+parser.add_argument('--exp_prefix', type=str, default="lora_xs/")
+parser.add_argument("--num_tasks", type=int, default=5)
 parser.add_argument("--data_addr", default="./data_raw/user/LaMP_2/train_questions_merged.json")
-parser.add_argument("--model_name", default='google/flan-t5-base')
+parser.add_argument("--model_name", default='./experiments/LaMP-2/finetune_all_train_user_profiles/checkpoint-32000')
 parser.add_argument("--num_virtual_tokens", type=int, default=2)
 parser.add_argument("--task", default='LaMP-2')
 parser.add_argument("--output_dir", default='./experiments')
 parser.add_argument("--generation_max_length", type = int, default = 128)
-parser.add_argument("--per_device_batch_size", type = int, default = 16)
-parser.add_argument("--learning_rate", type = float, default = 1e-5)
+parser.add_argument("--per_device_batch_size", type = int, default = 32)
+parser.add_argument("--learning_rate", type = float, default = 5e-5)
 parser.add_argument("--weight_decay", type = float, default = 0.0001)
-parser.add_argument("--num_train_epochs", type = int, default = 100)
-parser.add_argument("--lr_scheduler_type", default = "constant")
+parser.add_argument("--num_train_epochs", type = int, default = 50)
+parser.add_argument("--lr_scheduler_type", default = "linear")
 parser.add_argument("--warmup_ratio", type = float, default = 0.05)
 parser.add_argument("--generation_num_beams", type = int, default = 4)
 parser.add_argument("--gradient_accumulation_steps", type = int, default = 1)
@@ -64,22 +66,37 @@ if __name__ == "__main__":
             user_dataset, labels = GeneralSeq2SeqProfileDataset(task, prompt_generator, data=data[user_id]), get_all_labels(task)
             if len(user_dataset) < 60:
                 continue
-            train_dataset, eval_dataset = train_val_split(user_dataset, val_size=0.5)
-            print("Training dataset size:", len(train_dataset))
-            print("Eval dataset size:", len(eval_dataset))
+            train_dataset = user_dataset
             compute_metrics = create_metric_f1_accuracy(tokenizer = tokenizer, all_labels = labels)
             best_metric = "accuracy"
         
-        train_dataset = convert_to_hf_dataset(train_dataset, cache_dir = opts.cache_dir).map(create_preprocessor(tokenizer = tokenizer, max_length = tokenizer.model_max_length), batched=True)
-        eval_dataset = convert_to_hf_dataset(eval_dataset, cache_dir = opts.cache_dir).map(create_preprocessor(tokenizer = tokenizer, max_length = tokenizer.model_max_length), batched=True)
+        train_dataset = convert_to_hf_dataset(train_dataset, cache_dir = opts.cache_dir).map(create_preprocessor(tokenizer = tokenizer, max_length = opts.generation_max_length), batched=True)
+        eval_dataset = convert_to_hf_dataset(train_dataset, cache_dir = opts.cache_dir).map(create_preprocessor(tokenizer = tokenizer, max_length = opts.generation_max_length), batched=True)
 
         # prepare model for PEFTing
-        peft_config = PromptTuningConfig(
-            task_type="SEQ_2_SEQ_LM",
-            num_virtual_tokens=opts.num_virtual_tokens,
-            prompt_tuning_init="RANDOM"
-        )
-        model = get_peft_model(model, peft_config)
+        # peft_config = PromptTuningConfig(
+        #     task_type="SEQ_2_SEQ_LM",
+        #     num_virtual_tokens=opts.num_virtual_tokens,
+        #     prompt_tuning_init="RANDOM"
+        # )
+        # model = get_peft_model(model, peft_config)
+        # model.print_trainable_parameters()
+        config = LoraConfig(
+            r=opts.num_virtual_tokens,
+            target_modules=["q", "v"],
+            task_type="SEQ_2_SEQ_LM", # assuming a decoder-only model in this example
+            )
+        model = get_peft_model(model, config)
+
+        with open("lora_xs/reconstruct_config.yaml", 'r') as stream:
+            reconstr_config = yaml.load(stream, Loader=yaml.FullLoader)
+        adapter_name = "default"  # assuming a single LoRA adapter per module should be transformed to LoRA-XS
+        peft_config_dict = {adapter_name: config}
+        reconstr_config['svd']['rank'] = opts.num_virtual_tokens
+        find_and_initialize(
+            model, peft_config_dict, adapter_name=adapter_name, reconstr_type='svd',
+            writer=None, reconstruct_config=reconstr_config
+            )
         model.print_trainable_parameters()
 
 
@@ -89,7 +106,7 @@ if __name__ == "__main__":
             do_train = True,
             do_eval = True,
             evaluation_strategy = "steps",
-            eval_steps=20,
+            eval_steps=5,
             # parallelization args
             per_device_train_batch_size = opts.per_device_batch_size,
             per_device_eval_batch_size = opts.per_device_batch_size,
@@ -105,14 +122,14 @@ if __name__ == "__main__":
             predict_with_generate = True,
             generation_max_length = opts.generation_max_length,
             # logging strategy
-            save_strategy = "steps",
-            logging_steps = 5,
-            eval_accumulation_steps = 1,
-            load_best_model_at_end = True,
-            metric_for_best_model = best_metric,
-            greater_is_better = greater_is_better,
-            save_total_limit=1,
-            save_steps=40,
+            # save_strategy = "steps",
+            logging_steps = 1,
+            # eval_accumulation_steps = 1,
+            # load_best_model_at_end = True,
+            # metric_for_best_model = best_metric,
+            # greater_is_better = greater_is_better,
+            # save_total_limit=1,
+            # save_steps=40,
             report_to="tensorboard"
         )
 
@@ -127,16 +144,18 @@ if __name__ == "__main__":
         )
 
         # Get performance pre-training
-        extra_data = trainer.evaluate()
-        print("#"*20, "Pre-Finetuning Performance", "#"*20)
-        print(extra_data)
-        extra_data = {k.replace("eval", "pre_training_eval"): v for k, v in extra_data.items()}
+        pre_train_metrics = trainer.evaluate(train_dataset)
+        pre_train_metrics = {k.replace("eval", "pre_finetuning"): v for k, v in pre_train_metrics.items()}
 
         # Train model
         trainer.train()
 
+        # print performance post-training
+        post_train_metrics = trainer.evaluate(train_dataset)
+        post_train_metrics = {k.replace("eval", "post_finetuning"): v for k, v in post_train_metrics.items()}
+
         # Log results
-        logger.log(trainer, extra_data)
+        logger.log(trainer=None, extra_data={**pre_train_metrics, **post_train_metrics})
         task_counter += 1
         if task_counter == opts.num_tasks:
             break

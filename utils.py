@@ -10,23 +10,30 @@ def opts_to_exp_name(opts):
 
 class CSVLogger:
     def __init__(self, output_dir, exp_name):
-        self.filepath = os.path.join(output_dir, exp_name + ".csv")
+        self.filepath = os.path.join(output_dir, exp_name.split('/')[-1] + ".csv")
 
-    def log(self, trainer: Trainer, extra_data: Optional[Dict[str, Any]] = None):
+    def log(self, trainer: Optional[Trainer] = None, extra_data: Optional[Dict[str, Any]] = None):
         """Log information about the training process.
 
         Args:
             trainer (Trainer): The trainer instance.
             extra_data (Optional[Dict[str, Any]], optional): Additional data to log. Defaults to None.
         """
-        eval_result = trainer.state.log_history[-2]
-        train_result = trainer.evaluate(trainer.train_dataset)
-        train_result = {k.replace("eval", "train"): v for k, v in train_result.items()}
-        all_results = {**eval_result, **train_result}
+        all_results = {}
+        if trainer is not None:
+            eval_result = trainer.state.log_history[-2]
+            train_result = trainer.evaluate(trainer.train_dataset)
+            train_result = {k.replace("eval", "train"): v for k, v in train_result.items()}
+            all_results = {**eval_result, **train_result}
         all_results = {**all_results, **extra_data} if extra_data is not None else all_results
-        all_results["train_profile_size"] = len(trainer.train_dataset)
-        all_results["eval_profile_size"] = len(trainer.eval_dataset)
 
+        if trainer is not None:
+            all_results["train_profile_size"] = len(trainer.train_dataset)
+            all_results["eval_profile_size"] = len(trainer.eval_dataset)
+
+        if len(all_results) == 0:
+            return
+        
         if not os.path.exists(self.filepath):
             with open(self.filepath, "w", newline="") as csvfile:
                 w = csv.DictWriter(csvfile, fieldnames=all_results.keys())
