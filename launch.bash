@@ -1,7 +1,7 @@
 #!/bin/bash
 
 function launch_with_gpu {
-  local pre_launch_commands="cd /disk/scratch1/fady && source /opt/conda/bin/activate ./liouna && cd Liouna"
+  local pre_launch_commands="conda activate lamp"
   local cmd="$1"
   local gpu_id="$2"
   tmux new-window -n "GPU $gpu_id" \; send-keys "$pre_launch_commands && export CUDA_VISIBLE_DEVICES=$gpu_id && $cmd" C-m
