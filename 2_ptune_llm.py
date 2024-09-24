@@ -26,7 +26,7 @@ parser.add_argument("--output_dir", default='./experiments')
 parser.add_argument("--generation_max_length", type = int, default = 128)
 parser.add_argument("--per_device_batch_size", type = int, default = 32)
 parser.add_argument("--learning_rate", type = float, default = 5e-5)
-parser.add_argument("--weight_decay", type = float, default = 0.0001)
+# parser.add_argument("--weight_decay", type = float, default = 0.0001)
 parser.add_argument("--num_train_epochs", type = int, default = 50)
 parser.add_argument("--lr_scheduler_type", default = "linear")
 parser.add_argument("--warmup_ratio", type = float, default = 0.05)
@@ -109,7 +109,7 @@ if __name__ == "__main__":
             gradient_accumulation_steps = opts.gradient_accumulation_steps,
             # optimizer args
             learning_rate = opts.learning_rate,
-            weight_decay = opts.weight_decay,
+            # weight_decay = opts.weight_decay,
             num_train_epochs = opts.num_train_epochs,
             lr_scheduler_type = opts.lr_scheduler_type,
             warmup_ratio = opts.warmup_ratio,
