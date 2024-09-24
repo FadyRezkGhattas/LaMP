@@ -5,7 +5,7 @@ import os
 
 
 def opts_to_exp_name(opts):
-    return f"nvt_{opts.num_virtual_tokens}_lr_{opts.learning_rate}_wd_{opts.weight_decay}_epochs_{opts.num_train_epochs}"
+    return f"r_{opts.rank}_alpha_{opts.lora_alpha}_lr_{opts.learning_rate}_epochs_{opts.num_train_epochs}"
 
 
 class CSVLogger:
