@@ -19,7 +19,8 @@ parser.add_argument('--exp_prefix', type=str, default="lora_xs/")
 parser.add_argument("--num_tasks", type=int, default=5)
 parser.add_argument("--data_addr", default="./data_raw/user/LaMP_2/train_questions_merged.json")
 parser.add_argument("--model_name", default='./experiments/LaMP-2/finetune_all_train_user_profiles/checkpoint-32000')
-parser.add_argument("--num_virtual_tokens", type=int, default=2)
+parser.add_argument("--rank", type=int, default=6)
+parser.add_argument("--lora_alpha", type=int, default=16)
 parser.add_argument("--task", default='LaMP-2')
 parser.add_argument("--output_dir", default='./experiments')
 parser.add_argument("--generation_max_length", type = int, default = 128)
@@ -74,17 +75,12 @@ if __name__ == "__main__":
         eval_dataset = convert_to_hf_dataset(train_dataset, cache_dir = opts.cache_dir).map(create_preprocessor(tokenizer = tokenizer, max_length = opts.generation_max_length), batched=True)
 
         # prepare model for PEFTing
-        # peft_config = PromptTuningConfig(
-        #     task_type="SEQ_2_SEQ_LM",
-        #     num_virtual_tokens=opts.num_virtual_tokens,
-        #     prompt_tuning_init="RANDOM"
-        # )
-        # model = get_peft_model(model, peft_config)
-        # model.print_trainable_parameters()
         config = LoraConfig(
-            r=opts.num_virtual_tokens,
+            r=opts.rank,
             target_modules=["q", "v"],
             task_type="SEQ_2_SEQ_LM", # assuming a decoder-only model in this example
+            lora_alpha=opts.lora_alpha,
+            use_rslora=True
             )
         model = get_peft_model(model, config)
 
@@ -92,7 +88,7 @@ if __name__ == "__main__":
             reconstr_config = yaml.load(stream, Loader=yaml.FullLoader)
         adapter_name = "default"  # assuming a single LoRA adapter per module should be transformed to LoRA-XS
         peft_config_dict = {adapter_name: config}
-        reconstr_config['svd']['rank'] = opts.num_virtual_tokens
+        reconstr_config['svd']['rank'] = opts.rank
         find_and_initialize(
             model, peft_config_dict, adapter_name=adapter_name, reconstr_type='svd',
             writer=None, reconstruct_config=reconstr_config
