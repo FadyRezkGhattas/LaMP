@@ -10,3 +10,4 @@ peft==0.12.0
 scikit-learn
 rich
 tensorboardx
+accelerate
