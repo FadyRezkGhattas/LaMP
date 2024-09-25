@@ -20,6 +20,8 @@ from data.datasets import get_all_labels, GeneralSeq2SeqProfileDataset, create_p
 parser = argparse.ArgumentParser()
 parser.add_argument('--exp_prefix', type=str, default="lora_xs/")
 parser.add_argument("--num_tasks", type=int, default=-1, help="Train for fixed number of tasks. If -1, then train for all available tasks.")
+parser.add_argument("--from_user_id", type=int, default=0, help="Train model starting from this user index.")
+parser.add_argument("--to_user_id", type=int, default=-1, help="Terminate training at this user index. If -1, train until end of available users.")
 parser.add_argument("--data_addr", default="./data_raw/user/LaMP_2/train_questions_merged.json")
 parser.add_argument("--model_name", default='./experiments/LaMP-2/finetune_all_train_user_profiles/checkpoint-32000')
 parser.add_argument("--rank", type=int, default=6)
@@ -80,7 +82,8 @@ if __name__ == "__main__":
     original_model.print_trainable_parameters()
 
     task_counter = 0
-    for user_id in range(len(data)):
+    from_, to_ = opts.from_user_id, opts.to_user_id if opts.to_user_id != -1 else len(data)
+    for user_id in range(from_, to_):
         # Copy the model for the user and create an appropropriate data collator
         model = copy.deepcopy(original_model)
         collator = DataCollatorForSeq2Seq(tokenizer = tokenizer, model = model)
