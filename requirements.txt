@@ -11,3 +11,4 @@ scikit-learn
 rich
 tensorboardx
 accelerate
+safetensors
