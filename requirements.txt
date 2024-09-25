@@ -13,3 +13,4 @@ tensorboardx
 accelerate
 safetensors
 sacrebleu
+rouge-score
