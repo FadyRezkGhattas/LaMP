@@ -19,7 +19,7 @@ from data.datasets import get_all_labels, GeneralSeq2SeqProfileDataset, create_p
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--exp_prefix', type=str, default="lora_xs/")
-parser.add_argument("--num_tasks", type=int, default=5)
+parser.add_argument("--num_tasks", type=int, default=-1, help="Train for fixed number of tasks. If -1, then train for all available tasks.")
 parser.add_argument("--data_addr", default="./data_raw/user/LaMP_2/train_questions_merged.json")
 parser.add_argument("--model_name", default='./experiments/LaMP-2/finetune_all_train_user_profiles/checkpoint-32000')
 parser.add_argument("--rank", type=int, default=6)
@@ -130,14 +130,7 @@ if __name__ == "__main__":
             predict_with_generate = True,
             generation_max_length = opts.generation_max_length,
             # logging strategy
-            # save_strategy = "steps",
             logging_steps = 1,
-            # eval_accumulation_steps = 1,
-            # load_best_model_at_end = True,
-            # metric_for_best_model = best_metric,
-            # greater_is_better = greater_is_better,
-            # save_total_limit=1,
-            # save_steps=40,
             report_to="tensorboard"
         )
 
@@ -165,5 +158,10 @@ if __name__ == "__main__":
         # Log results
         logger.log(trainer=None, extra_data={**pre_train_metrics, **post_train_metrics})
         task_counter += 1
+
+        # Save Adapter
+        for param in model.parameters(): param.data = param.data.contiguous()
+        model.save_pretrained(os.path.join(opts.output_dir, 'ckpts', "user_" + str(user_id)))
+
         if task_counter == opts.num_tasks:
             break
