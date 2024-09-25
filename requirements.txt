@@ -12,3 +12,4 @@ rich
 tensorboardx
 accelerate
 safetensors
+sacrebleu
