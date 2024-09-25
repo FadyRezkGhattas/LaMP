@@ -6,7 +6,9 @@ from rich import print
 from transformers.data.data_collator import DataCollatorForSeq2Seq
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, Seq2SeqTrainer, Seq2SeqTrainingArguments
 
-from metrics.classification_metrics import create_metric_f1_accuracy
+from metrics.generation_metrics import create_metric_bleu_rouge_meteor
+from metrics.classification_metrics import create_metric_f1_accuracy, create_metric_mae_rmse
+
 from prompts.prompts import create_prompt_generator as create_prompt_generator_val
 from prompts.singular_prompts import create_prompt_generator as create_prompt_generator_train
 from data.datasets import GeneralSeq2SeqDataset, GeneralSeq2SeqProfilesDataset, get_all_labels, create_preprocessor, convert_to_hf_dataset
@@ -47,18 +49,31 @@ if __name__ == "__main__":
     prompt_generator_train = create_prompt_generator_train(tokenizer)
     prompt_generator_val, _ = create_prompt_generator_val(0, tokenizer=tokenizer)
 
+    # Load datasets
+    print("[bold magenta]Step 2 (a): Loading data and metrics...[/bold magenta]")
+    train_dataset, labels = GeneralSeq2SeqProfilesDataset(task, prompt_generator_train, data_addr=opts.train_data), get_all_labels(task)
+    eval_dataset = GeneralSeq2SeqDataset(opts.validation_data, True, task, prompt_generator_val)
+    if opts.test_data:
+        test_dataset = GeneralSeq2SeqDataset(opts.test_data, opts.use_profile, task, prompt_generator_val)
+
     greater_is_better = True
     if task == "LaMP-2":
-        train_dataset, labels = GeneralSeq2SeqProfilesDataset(task, prompt_generator_train, data_addr=opts.train_data), get_all_labels(task)
-        eval_dataset = GeneralSeq2SeqDataset(opts.validation_data, True, task, prompt_generator_val)
-        if opts.test_data:
-            test_dataset = GeneralSeq2SeqDataset(opts.test_data, opts.use_profile, task, prompt_generator_val)
         compute_metrics = create_metric_f1_accuracy(tokenizer = tokenizer, all_labels = labels)
         best_metric = "accuracy"
+    elif task == "LaMP-3":
+        compute_metrics = create_metric_mae_rmse(tokenizer = tokenizer, all_labels = labels)
+        best_metric = "mae"
+        greater_is_better = False
+    elif task == "LaMP-4":
+        compute_metrics = create_metric_bleu_rouge_meteor(tokenizer = tokenizer)
+        best_metric = "rouge-1"
+    elif task == "LaMP-5":
+        compute_metrics = create_metric_bleu_rouge_meteor(tokenizer = tokenizer)
+        best_metric = "rouge-1"
     else:
         raise ValueError(f"Task {task} not supported")
     
-    print("[bold magenta]Step 2: Preprocessing data...[/bold magenta]")
+    print("[bold magenta]Step 2(b): Preprocessing data...[/bold magenta]")
     print("Processing train data")
     print(f"Train Split Size: {len(train_dataset)}")
     train_dataset = convert_to_hf_dataset(train_dataset, cache_dir = opts.cache_dir).map(create_preprocessor(tokenizer = tokenizer, max_length = tokenizer.model_max_length), batched=True)

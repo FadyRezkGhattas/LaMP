@@ -5,15 +5,17 @@ import copy
 import argparse
 from rich import print
 
+from peft import get_peft_model, LoraConfig
 from lora_xs.initialization_utils import find_and_initialize
-from peft import get_peft_model, PromptTuningConfig, LoraConfig, TaskType
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, Seq2SeqTrainer, Seq2SeqTrainingArguments
 from transformers.data.data_collator import DataCollatorForSeq2Seq
 
 from utils import CSVLogger, opts_to_exp_name
 from prompts.singular_prompts import create_prompt_generator
-from metrics.classification_metrics import create_metric_f1_accuracy
-from data.datasets import get_all_labels, GeneralSeq2SeqProfileDataset, create_preprocessor, convert_to_hf_dataset, train_val_split
+from metrics.generation_metrics import create_metric_bleu_rouge_meteor
+from metrics.classification_metrics import create_metric_f1_accuracy, create_metric_mae_rmse
+from data.datasets import get_all_labels, GeneralSeq2SeqProfileDataset, create_preprocessor, convert_to_hf_dataset
+
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--exp_prefix', type=str, default="lora_xs/")
@@ -87,13 +89,22 @@ if __name__ == "__main__":
         task = opts.task
         prompt_generator = create_prompt_generator(tokenizer)
         greater_is_better = True
+        train_dataset, labels = GeneralSeq2SeqProfileDataset(task, prompt_generator, data=data[user_id]), get_all_labels(task)
         if task == "LaMP-2":
-            user_dataset, labels = GeneralSeq2SeqProfileDataset(task, prompt_generator, data=data[user_id]), get_all_labels(task)
-            if len(user_dataset) < 60:
-                continue
-            train_dataset = user_dataset
             compute_metrics = create_metric_f1_accuracy(tokenizer = tokenizer, all_labels = labels)
             best_metric = "accuracy"
+        elif task == "LaMP-3":
+            compute_metrics = create_metric_mae_rmse(tokenizer = tokenizer, all_labels = labels)
+            best_metric = "mae"
+            greater_is_better = False
+        elif task == "LaMP-4":
+            compute_metrics = create_metric_bleu_rouge_meteor(tokenizer = tokenizer)
+            best_metric = "rouge-1"
+        elif task == "LaMP-5":
+            compute_metrics = create_metric_bleu_rouge_meteor(tokenizer = tokenizer)
+            best_metric = "rouge-1"
+        else:
+            raise ValueError(f"Task {task} not supported")
         
         train_dataset = convert_to_hf_dataset(train_dataset, cache_dir = opts.cache_dir).map(create_preprocessor(tokenizer = tokenizer, max_length = tokenizer.model_max_length), batched=True)
         eval_dataset = convert_to_hf_dataset(train_dataset, cache_dir = opts.cache_dir).map(create_preprocessor(tokenizer = tokenizer, max_length = tokenizer.model_max_length), batched=True)
