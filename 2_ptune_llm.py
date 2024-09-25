@@ -93,6 +93,7 @@ if __name__ == "__main__":
         prompt_generator = create_prompt_generator(tokenizer)
         greater_is_better = True
         train_dataset, labels = GeneralSeq2SeqProfileDataset(task, prompt_generator, data=data[user_id]), get_all_labels(task)
+        test_dataset = GeneralSeq2SeqProfileDataset(task, prompt_generator, data=data[user_id], val=True)
         if task == "LaMP-2":
             compute_metrics = create_metric_f1_accuracy(tokenizer = tokenizer, all_labels = labels)
             best_metric = "accuracy"
@@ -111,6 +112,7 @@ if __name__ == "__main__":
         
         train_dataset = convert_to_hf_dataset(train_dataset, cache_dir = opts.cache_dir).map(create_preprocessor(tokenizer = tokenizer, max_length = tokenizer.model_max_length), batched=True)
         eval_dataset = convert_to_hf_dataset(train_dataset, cache_dir = opts.cache_dir).map(create_preprocessor(tokenizer = tokenizer, max_length = tokenizer.model_max_length), batched=True)
+        test_dataset = convert_to_hf_dataset(test_dataset, cache_dir = opts.cache_dir).map(create_preprocessor(tokenizer = tokenizer, max_length = tokenizer.model_max_length), batched=True)
 
         training_args = Seq2SeqTrainingArguments(
             # trainer basics
@@ -154,12 +156,15 @@ if __name__ == "__main__":
         # Train model
         trainer.train()
 
-        # print performance post-training
+        # get performance post-training
         post_train_metrics = trainer.evaluate(train_dataset)
         post_train_metrics = {k.replace("eval", "post_finetuning"): v for k, v in post_train_metrics.items()}
 
+        # Test dataset
+        test_metrics = trainer.evaluate(test_dataset)
+
         # Log results
-        logger.log(trainer=None, extra_data={**pre_train_metrics, **post_train_metrics})
+        logger.log(trainer=None, extra_data={'user_id': user_id, **pre_train_metrics, **post_train_metrics, **test_metrics})
         task_counter += 1
 
         # Save Adapter
