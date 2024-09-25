@@ -1,6 +1,7 @@
 import os
 import json
 import yaml
+import copy
 import argparse
 from rich import print
 
@@ -26,8 +27,7 @@ parser.add_argument("--output_dir", default='./experiments')
 parser.add_argument("--generation_max_length", type = int, default = 128)
 parser.add_argument("--per_device_batch_size", type = int, default = 32)
 parser.add_argument("--learning_rate", type = float, default = 5e-5)
-# parser.add_argument("--weight_decay", type = float, default = 0.0001)
-parser.add_argument("--num_train_epochs", type = int, default = 50)
+parser.add_argument("--num_train_epochs", type = int, default = 1)
 parser.add_argument("--lr_scheduler_type", default = "linear")
 parser.add_argument("--warmup_ratio", type = float, default = 0.05)
 parser.add_argument("--generation_num_beams", type = int, default = 4)
@@ -52,11 +52,35 @@ if __name__ == "__main__":
     with open(opts.data_addr) as f:
         data = json.load(f)
 
+    # Load model, tokenizer, collator, and raw dict data
+    original_model = AutoModelForSeq2SeqLM.from_pretrained(opts.model_name, cache_dir=opts.cache_dir)
+    tokenizer = AutoTokenizer.from_pretrained(opts.model_name, cache_dir=opts.cache_dir)
+
+    # prepare model for PEFTing
+    config = LoraConfig(
+        r=opts.rank,
+        target_modules=["q", "v"],
+        task_type="SEQ_2_SEQ_LM", # assuming a decoder-only model in this example
+        lora_alpha=opts.lora_alpha,
+        use_rslora=True
+        )
+    original_model = get_peft_model(original_model, config)
+
+    with open("lora_xs/reconstruct_config.yaml", 'r') as stream:
+        reconstr_config = yaml.load(stream, Loader=yaml.FullLoader)
+    adapter_name = "default"  # assuming a single LoRA adapter per module should be transformed to LoRA-XS
+    peft_config_dict = {adapter_name: config}
+    reconstr_config['svd']['rank'] = opts.rank
+    find_and_initialize(
+        original_model, peft_config_dict, adapter_name=adapter_name, reconstr_type='svd',
+        writer=None, reconstruct_config=reconstr_config
+        )
+    original_model.print_trainable_parameters()
+
     task_counter = 0
     for user_id in range(len(data)):
-        # Load model, tokenizer, collator, and raw dict data
-        model = AutoModelForSeq2SeqLM.from_pretrained(opts.model_name, cache_dir=opts.cache_dir)
-        tokenizer = AutoTokenizer.from_pretrained(opts.model_name, cache_dir=opts.cache_dir)
+        # Copy the model for the user and create an appropropriate data collator
+        model = copy.deepcopy(original_model)
         collator = DataCollatorForSeq2Seq(tokenizer = tokenizer, model = model)
 
         # Create datasets and metrics
@@ -71,30 +95,8 @@ if __name__ == "__main__":
             compute_metrics = create_metric_f1_accuracy(tokenizer = tokenizer, all_labels = labels)
             best_metric = "accuracy"
         
-        train_dataset = convert_to_hf_dataset(train_dataset, cache_dir = opts.cache_dir).map(create_preprocessor(tokenizer = tokenizer, max_length = opts.generation_max_length), batched=True)
-        eval_dataset = convert_to_hf_dataset(train_dataset, cache_dir = opts.cache_dir).map(create_preprocessor(tokenizer = tokenizer, max_length = opts.generation_max_length), batched=True)
-
-        # prepare model for PEFTing
-        config = LoraConfig(
-            r=opts.rank,
-            target_modules=["q", "v"],
-            task_type="SEQ_2_SEQ_LM", # assuming a decoder-only model in this example
-            lora_alpha=opts.lora_alpha,
-            use_rslora=True
-            )
-        model = get_peft_model(model, config)
-
-        with open("lora_xs/reconstruct_config.yaml", 'r') as stream:
-            reconstr_config = yaml.load(stream, Loader=yaml.FullLoader)
-        adapter_name = "default"  # assuming a single LoRA adapter per module should be transformed to LoRA-XS
-        peft_config_dict = {adapter_name: config}
-        reconstr_config['svd']['rank'] = opts.rank
-        find_and_initialize(
-            model, peft_config_dict, adapter_name=adapter_name, reconstr_type='svd',
-            writer=None, reconstruct_config=reconstr_config
-            )
-        model.print_trainable_parameters()
-
+        train_dataset = convert_to_hf_dataset(train_dataset, cache_dir = opts.cache_dir).map(create_preprocessor(tokenizer = tokenizer, max_length = tokenizer.model_max_length), batched=True)
+        eval_dataset = convert_to_hf_dataset(train_dataset, cache_dir = opts.cache_dir).map(create_preprocessor(tokenizer = tokenizer, max_length = tokenizer.model_max_length), batched=True)
 
         training_args = Seq2SeqTrainingArguments(
             # trainer basics
@@ -109,7 +111,6 @@ if __name__ == "__main__":
             gradient_accumulation_steps = opts.gradient_accumulation_steps,
             # optimizer args
             learning_rate = opts.learning_rate,
-            # weight_decay = opts.weight_decay,
             num_train_epochs = opts.num_train_epochs,
             lr_scheduler_type = opts.lr_scheduler_type,
             warmup_ratio = opts.warmup_ratio,
