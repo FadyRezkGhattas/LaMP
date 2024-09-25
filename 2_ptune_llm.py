@@ -164,7 +164,8 @@ if __name__ == "__main__":
         test_metrics = trainer.evaluate(test_dataset)
 
         # Log results
-        logger.log(trainer=None, extra_data={'user_id': user_id, **pre_train_metrics, **post_train_metrics, **test_metrics})
+        logging_data = {'user_id': user_id, 'profile_size':len(train_dataset),  **pre_train_metrics, **post_train_metrics, **test_metrics}
+        logger.log(trainer=None, extra_data=logging_data)
         task_counter += 1
 
         # Save Adapter
