@@ -8,7 +8,7 @@ function launch_with_gpu {
     screen -S "GPU_$gpu_id" -X quit
   fi
   echo $gpu_id
-  screen -dmS "GPU_$gpu_id" bash -c "$pre_launch_commands && $cmd"
+  screen -dmS "GPU_$gpu_id" bash -c "$pre_launch_commands && export CUDA_VISIBLE_DEVICES=$gpu_id && $cmd"
 }
 
 # Check for enough arguments
