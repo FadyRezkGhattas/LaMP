@@ -84,6 +84,10 @@ if __name__ == "__main__":
     task_counter = 0
     from_, to_ = opts.from_user_id, opts.to_user_id if opts.to_user_id != -1 else len(data)
     for user_id in range(from_, to_):
+        # If adapter exists for user, skip
+        ckpt_path = os.path.join(opts.output_dir, 'ckpts', "user_" + str(user_id))
+        if os.path.isfile(os.path.join(ckpt_path, 'adapter_model.safetensors')):
+            continue
         # Copy the model for the user and create an appropropriate data collator
         model = copy.deepcopy(original_model)
         collator = DataCollatorForSeq2Seq(tokenizer = tokenizer, model = model)
@@ -170,7 +174,7 @@ if __name__ == "__main__":
 
         # Save Adapter
         for param in model.parameters(): param.data = param.data.contiguous()
-        model.save_pretrained(os.path.join(opts.output_dir, 'ckpts', "user_" + str(user_id)))
+        model.save_pretrained(ckpt_path)
 
         if task_counter == opts.num_tasks:
             break
