@@ -10,7 +10,7 @@ from lora_xs.initialization_utils import find_and_initialize
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, Seq2SeqTrainer, Seq2SeqTrainingArguments
 from transformers.data.data_collator import DataCollatorForSeq2Seq
 
-from utils import CSVLogger, opts_to_exp_name
+from utils.utils import CSVLogger, opts_to_exp_name
 from prompts.singular_prompts import create_prompt_generator
 from metrics.generation_metrics import create_metric_bleu_rouge_meteor
 from metrics.classification_metrics import create_metric_f1_accuracy, create_metric_mae_rmse
