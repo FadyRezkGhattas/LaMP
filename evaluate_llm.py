@@ -33,8 +33,7 @@ if __name__ == "__main__":
     opts = parser.parse_args()
     
     # helper objects
-    opts.exp_name = "evals/" + opts.exp_name
-    opts.output_dir = os.path.join(opts.output_dir, opts.task, opts.exp_name)
+    opts.output_dir = os.path.join(opts.output_dir, opts.task, "evals", opts.exp_name)
     os.makedirs(opts.output_dir, exist_ok=True)
 
     # Load model, tokenizer, collator, and raw dict data
@@ -57,7 +56,8 @@ if __name__ == "__main__":
         users = os.listdir(opts.model_zoo_addr)
         users = [int(x.split('_')[-1]) for x in users]
         dataset = Subset(dataset, users)
-
+    print('Dataset Size is:', len(dataset))
+    
     # Create metrics
     labels = get_all_labels(task)
     if task == "LaMP-2":
