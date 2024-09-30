@@ -5,6 +5,7 @@ import argparse
 
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, Seq2SeqTrainer, Seq2SeqTrainingArguments
 from transformers.data.data_collator import DataCollatorForSeq2Seq
+from torch.utils.data import Subset
 
 from prompts.singular_prompts import create_prompt_generator as create_prompt_generator_profile
 from prompts.prompts import create_prompt_generator as create_prompt_generator_query
@@ -25,7 +26,8 @@ parser.add_argument("--generation_max_length", type = int, default = 128)
 parser.add_argument("--max_length", type = int, default = 512)
 parser.add_argument("--generation_num_beams", type = int, default = 4)
 parser.add_argument("--cache_dir", default = "./cache")
-
+# If we need to compute performance on samples that only has adapters, then pass a model zoo directory
+parser.add_argument('--model_zoo_addr', type=str, default='experiments/LaMP-2/model_zoo/r_6_alpha_16_lr_0.01_epochs_20_sch_linear/ckpts', help='If model zoo directory is provided (a folder with per user adapter), then performance only on users that have an adapter/folder in the model zoo are computed')
 
 if __name__ == "__main__":
     opts = parser.parse_args()
@@ -51,6 +53,11 @@ if __name__ == "__main__":
         prompt_generator = create_prompt_generator_profile(tokenizer)
         dataset = GeneralSeq2SeqProfilesDataset(opts.task, prompt_generator, data_addr=opts.data_addr)
     
+    if opts.model_zoo_addr is not None:
+        users = os.listdir(opts.model_zoo_addr)
+        users = [int(x.split('_')[-1]) for x in users]
+        dataset = Subset(dataset, users)
+
     # Create metrics
     labels = get_all_labels(task)
     if task == "LaMP-2":
