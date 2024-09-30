@@ -96,7 +96,9 @@ if __name__ == "__main__":
         task = opts.task
         prompt_generator = create_prompt_generator(tokenizer)
         greater_is_better = True
+        # Profile data for training
         train_dataset, labels = GeneralSeq2SeqProfileDataset(task, prompt_generator, data=data[user_id]), get_all_labels(task)
+        # Query sample to eval on
         test_dataset = GeneralSeq2SeqProfileDataset(task, prompt_generator, data=data[user_id], val=True)
         if task == "LaMP-2":
             compute_metrics = create_metric_f1_accuracy(tokenizer = tokenizer, all_labels = labels)
@@ -154,21 +156,24 @@ if __name__ == "__main__":
         )
 
         # Get performance pre-training
-        pre_train_metrics = trainer.evaluate(train_dataset)
-        pre_train_metrics = {k.replace("eval", "pre_finetuning"): v for k, v in pre_train_metrics.items()}
+        pretrain_train_metrics = trainer.evaluate(train_dataset)
+        pretrain_train_metrics = {k.replace("eval", "pre_finetuning"): v for k, v in pretrain_train_metrics.items()}
+
+        pretrain_eval_metrics = trainer.evaluate(test_dataset)
+        pretrain_eval_metrics = {k.replace("eval", "pretrain_eval"): v for k, v in pretrain_eval_metrics.items()}
 
         # Train model
         trainer.train()
 
         # get performance post-training
-        post_train_metrics = trainer.evaluate(train_dataset)
-        post_train_metrics = {k.replace("eval", "post_finetuning"): v for k, v in post_train_metrics.items()}
+        posttrain_train_metrics = trainer.evaluate(train_dataset)
+        posttrain_train_metrics = {k.replace("eval", "post_finetuning"): v for k, v in posttrain_train_metrics.items()}
 
-        # Test dataset
-        test_metrics = trainer.evaluate(test_dataset)
+        posttrain_test_metrics = trainer.evaluate(test_dataset)
+        posttrain_test_metrics = {k.replace("eval", "posttrain_eval"): v for k, v in posttrain_test_metrics.items()}
 
         # Log results
-        logging_data = {'user_id': user_id, 'profile_size':len(train_dataset),  **pre_train_metrics, **post_train_metrics, **test_metrics}
+        logging_data = {'user_id': user_id, 'profile_size':len(train_dataset),  **pretrain_train_metrics, **pretrain_eval_metrics, **posttrain_train_metrics, **posttrain_test_metrics}
         logger.log(trainer=None, extra_data=logging_data)
         task_counter += 1
 
