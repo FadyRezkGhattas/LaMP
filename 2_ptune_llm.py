@@ -20,7 +20,7 @@ from data.datasets import get_all_labels, GeneralSeq2SeqProfileDataset, create_p
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--exp_prefix', type=str, default="lora_xs/")
+parser.add_argument('--exp_prefix', type=str, default="test/")
 parser.add_argument("--num_tasks", type=int, default=-1, help="Train for fixed number of tasks. If -1, then train for all available tasks.")
 parser.add_argument("--from_user_id", type=int, default=0, help="Train model starting from this user index.")
 parser.add_argument("--to_user_id", type=int, default=-1, help="Terminate training at this user index. If -1, train until end of available users.")
@@ -86,6 +86,25 @@ if __name__ == "__main__":
     original_model.print_trainable_parameters()
     original_model = load_adapter(original_model, opts.svd_pth)
 
+    # Create metrics
+    task = opts.task
+    labels = get_all_labels(task)
+    if task == "LaMP-2":
+        compute_metrics = create_metric_f1_accuracy(tokenizer = tokenizer, all_labels = labels)
+        best_metric = "accuracy"
+    elif task == "LaMP-3":
+        compute_metrics = create_metric_mae_rmse(tokenizer = tokenizer, all_labels = labels)
+        best_metric = "mae"
+        greater_is_better = False
+    elif task == "LaMP-4":
+        compute_metrics = create_metric_bleu_rouge_meteor(tokenizer = tokenizer)
+        best_metric = "rouge-1"
+    elif task == "LaMP-5":
+        compute_metrics = create_metric_bleu_rouge_meteor(tokenizer = tokenizer)
+        best_metric = "rouge-1"
+    else:
+        raise ValueError(f"Task {task} not supported")
+
     task_counter = 0
     from_, to_ = opts.from_user_id, opts.to_user_id if opts.to_user_id != -1 else len(data)
     for user_id in range(from_, to_):
@@ -97,29 +116,13 @@ if __name__ == "__main__":
         model = copy.deepcopy(original_model)
         collator = DataCollatorForSeq2Seq(tokenizer = tokenizer, model = model)
 
-        # Create datasets and metrics
-        task = opts.task
+        # Create datasets
         prompt_generator = create_prompt_generator(tokenizer)
         greater_is_better = True
         # Profile data for training
-        train_dataset, labels = GeneralSeq2SeqProfileDataset(task, prompt_generator, data=data[user_id]), get_all_labels(task)
+        train_dataset = GeneralSeq2SeqProfileDataset(task, prompt_generator, data=data[user_id])
         # Query sample to eval on
         test_dataset = GeneralSeq2SeqProfileDataset(task, prompt_generator, data=data[user_id], val=True)
-        if task == "LaMP-2":
-            compute_metrics = create_metric_f1_accuracy(tokenizer = tokenizer, all_labels = labels)
-            best_metric = "accuracy"
-        elif task == "LaMP-3":
-            compute_metrics = create_metric_mae_rmse(tokenizer = tokenizer, all_labels = labels)
-            best_metric = "mae"
-            greater_is_better = False
-        elif task == "LaMP-4":
-            compute_metrics = create_metric_bleu_rouge_meteor(tokenizer = tokenizer)
-            best_metric = "rouge-1"
-        elif task == "LaMP-5":
-            compute_metrics = create_metric_bleu_rouge_meteor(tokenizer = tokenizer)
-            best_metric = "rouge-1"
-        else:
-            raise ValueError(f"Task {task} not supported")
         
         train_dataset = convert_to_hf_dataset(train_dataset, cache_dir = opts.cache_dir).map(create_preprocessor(tokenizer = tokenizer, max_length = tokenizer.model_max_length), batched=True)
         eval_dataset = convert_to_hf_dataset(train_dataset, cache_dir = opts.cache_dir).map(create_preprocessor(tokenizer = tokenizer, max_length = tokenizer.model_max_length), batched=True)
