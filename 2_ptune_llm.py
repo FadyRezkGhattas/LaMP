@@ -5,11 +5,13 @@ import copy
 import argparse
 from rich import print
 
+from accelerate import Accelerator
 from peft import get_peft_model, LoraConfig
 from lora_xs.initialization_utils import find_and_initialize
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, Seq2SeqTrainer, Seq2SeqTrainingArguments
 from transformers.data.data_collator import DataCollatorForSeq2Seq
 
+from load_adapters import load_adapter
 from utils.utils import CSVLogger, opts_to_exp_name
 from prompts.singular_prompts import create_prompt_generator
 from metrics.generation_metrics import create_metric_bleu_rouge_meteor
@@ -24,6 +26,7 @@ parser.add_argument("--from_user_id", type=int, default=0, help="Train model sta
 parser.add_argument("--to_user_id", type=int, default=-1, help="Terminate training at this user index. If -1, train until end of available users.")
 parser.add_argument("--data_addr", default="./data_raw/user/LaMP_2/train_questions_merged.json")
 parser.add_argument("--model_name", default='./experiments/LaMP-2/finetune_all_train_user_profiles/checkpoint-32000')
+parser.add_argument("--svd_pth", default='./experiments/fixed_adapter')
 parser.add_argument("--rank", type=int, default=6)
 parser.add_argument("--lora_alpha", type=int, default=16)
 parser.add_argument("--task", default='LaMP-2')
@@ -41,6 +44,7 @@ parser.add_argument("--cache_dir", default = "./cache")
 
 if __name__ == "__main__":
     opts = parser.parse_args()
+    accelerator = Accelerator()
     
     # helper objects
     exp_name = opts.exp_prefix + opts_to_exp_name(opts)
@@ -80,6 +84,7 @@ if __name__ == "__main__":
         writer=None, reconstruct_config=reconstr_config
         )
     original_model.print_trainable_parameters()
+    original_model = load_adapter(original_model, opts.svd_pth)
 
     task_counter = 0
     from_, to_ = opts.from_user_id, opts.to_user_id if opts.to_user_id != -1 else len(data)
@@ -172,14 +177,15 @@ if __name__ == "__main__":
         posttrain_test_metrics = trainer.evaluate(test_dataset)
         posttrain_test_metrics = {k.replace("eval", "posttrain_eval"): v for k, v in posttrain_test_metrics.items()}
 
-        # Log results
-        logging_data = {'user_id': user_id, 'profile_size':len(train_dataset),  **pretrain_train_metrics, **pretrain_eval_metrics, **posttrain_train_metrics, **posttrain_test_metrics}
-        logger.log(trainer=None, extra_data=logging_data)
-        task_counter += 1
+        if accelerator.is_main_process():
+            # Log results
+            logging_data = {'user_id': user_id, 'profile_size':len(train_dataset),  **pretrain_train_metrics, **pretrain_eval_metrics, **posttrain_train_metrics, **posttrain_test_metrics}
+            logger.log(trainer=None, extra_data=logging_data)
+            task_counter += 1
 
-        # Save Adapter
-        for param in model.parameters(): param.data = param.data.contiguous()
-        model.save_pretrained(ckpt_path)
+            # Save Adapter
+            for param in model.parameters(): param.data = param.data.contiguous()
+            model.save_pretrained(ckpt_path)
 
         if task_counter == opts.num_tasks:
             break
