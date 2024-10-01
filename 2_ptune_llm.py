@@ -11,12 +11,12 @@ from lora_xs.initialization_utils import find_and_initialize
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, Seq2SeqTrainer, Seq2SeqTrainingArguments
 from transformers.data.data_collator import DataCollatorForSeq2Seq
 
+from metrics.utils import get_metrics
 from load_adapters import load_adapter
 from utils.utils import CSVLogger, opts_to_exp_name
 from prompts.singular_prompts import create_prompt_generator
-from metrics.generation_metrics import create_metric_bleu_rouge_meteor
-from metrics.classification_metrics import create_metric_f1_accuracy, create_metric_mae_rmse
-from data.datasets import get_all_labels, GeneralSeq2SeqProfileDataset, create_preprocessor, convert_to_hf_dataset
+
+from data.datasets import GeneralSeq2SeqProfileDataset, create_preprocessor, convert_to_hf_dataset
 
 
 parser = argparse.ArgumentParser()
@@ -89,22 +89,7 @@ if __name__ == "__main__":
     # Create metrics
     task = opts.task
     greater_is_better = True
-    labels = get_all_labels(task)
-    if task == "LaMP-2":
-        compute_metrics = create_metric_f1_accuracy(tokenizer = tokenizer, all_labels = labels)
-        best_metric = "accuracy"
-    elif task == "LaMP-3":
-        compute_metrics = create_metric_mae_rmse(tokenizer = tokenizer, all_labels = labels)
-        best_metric = "mae"
-        greater_is_better = False
-    elif task == "LaMP-4":
-        compute_metrics = create_metric_bleu_rouge_meteor(tokenizer = tokenizer)
-        best_metric = "rouge-1"
-    elif task == "LaMP-5":
-        compute_metrics = create_metric_bleu_rouge_meteor(tokenizer = tokenizer)
-        best_metric = "rouge-1"
-    else:
-        raise ValueError(f"Task {task} not supported")
+    compute_metrics, best_metric, labels, greater_is_better = get_metrics(task, tokenizer)
 
     task_counter = 0
     from_, to_ = opts.from_user_id, opts.to_user_id if opts.to_user_id != -1 else len(data)

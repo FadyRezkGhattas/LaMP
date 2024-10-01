@@ -6,8 +6,7 @@ from rich import print
 from transformers.data.data_collator import DataCollatorForSeq2Seq
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, Seq2SeqTrainer, Seq2SeqTrainingArguments
 
-from metrics.generation_metrics import create_metric_bleu_rouge_meteor
-from metrics.classification_metrics import create_metric_f1_accuracy, create_metric_mae_rmse
+from metrics.utils import get_metrics
 
 from prompts.prompts import create_prompt_generator as create_prompt_generator_val
 from prompts.singular_prompts import create_prompt_generator as create_prompt_generator_train
@@ -56,22 +55,7 @@ if __name__ == "__main__":
     if opts.test_data:
         test_dataset = GeneralSeq2SeqDataset(opts.test_data, opts.use_profile, task, prompt_generator_val)
 
-    greater_is_better = True
-    if task == "LaMP-2":
-        compute_metrics = create_metric_f1_accuracy(tokenizer = tokenizer, all_labels = labels)
-        best_metric = "accuracy"
-    elif task == "LaMP-3":
-        compute_metrics = create_metric_mae_rmse(tokenizer = tokenizer, all_labels = labels)
-        best_metric = "mae"
-        greater_is_better = False
-    elif task == "LaMP-4":
-        compute_metrics = create_metric_bleu_rouge_meteor(tokenizer = tokenizer)
-        best_metric = "rouge-1"
-    elif task == "LaMP-5":
-        compute_metrics = create_metric_bleu_rouge_meteor(tokenizer = tokenizer)
-        best_metric = "rouge-1"
-    else:
-        raise ValueError(f"Task {task} not supported")
+    compute_metrics, best_metric, labels, greater_is_better = get_metrics(task, tokenizer)
     
     print("[bold magenta]Step 2(b): Preprocessing data...[/bold magenta]")
     print("Processing train data")
