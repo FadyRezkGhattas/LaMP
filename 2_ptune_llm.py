@@ -88,6 +88,7 @@ if __name__ == "__main__":
 
     # Create metrics
     task = opts.task
+    greater_is_better = True
     labels = get_all_labels(task)
     if task == "LaMP-2":
         compute_metrics = create_metric_f1_accuracy(tokenizer = tokenizer, all_labels = labels)
@@ -118,7 +119,7 @@ if __name__ == "__main__":
 
         # Create datasets
         prompt_generator = create_prompt_generator(tokenizer)
-        greater_is_better = True
+
         # Profile data for training
         train_dataset = GeneralSeq2SeqProfileDataset(task, prompt_generator, data=data[user_id])
         # Query sample to eval on
