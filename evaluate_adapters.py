@@ -66,11 +66,14 @@ if __name__ == '__main__':
     prompt_generator = create_prompt_generator(tokenizer)
     dataset = GeneralSeq2SeqDataset(opts.data_addr, use_profile=False, task=task, create_prompt=None)
 
+    users = os.listdir(os.path.join(opts.model_zoo_addr, 'ckpts'))
+    users = [int(x.split('_')[-1]) for x in users]
+    
     tokenized_predictions = []
     txt_labels = []
     user_ids = []
-    with tqdm(total=len(dataset), desc='Processing Users') as pbar:
-        for user_id in range(len(dataset)):
+    with tqdm(total=len(users), desc='Processing Users') as pbar:
+        for user_id in users:
             user_model = load_adapter(original_model, os.path.join(opts.model_zoo_addr, 'ckpts', f'user_{user_id}')).to('cuda')
             item = dataset[user_id]
             inputs = tokenizer(item["source"], truncation=True, max_length=opts.max_length, return_tensors="pt").to('cuda')
