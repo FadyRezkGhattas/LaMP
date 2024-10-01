@@ -177,7 +177,7 @@ if __name__ == "__main__":
         posttrain_test_metrics = trainer.evaluate(test_dataset)
         posttrain_test_metrics = {k.replace("eval", "posttrain_eval"): v for k, v in posttrain_test_metrics.items()}
 
-        if accelerator.is_main_process():
+        if accelerator.is_main_process:
             # Log results
             logging_data = {'user_id': user_id, 'profile_size':len(train_dataset),  **pretrain_train_metrics, **pretrain_eval_metrics, **posttrain_train_metrics, **posttrain_test_metrics}
             logger.log(trainer=None, extra_data=logging_data)
