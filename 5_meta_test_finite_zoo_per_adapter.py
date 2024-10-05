@@ -39,6 +39,7 @@ if __name__ == '__main__':
     opts = parser.parse_args()
     dataset_name = opts.data_addr.split('/')[-1].split('.')[0]
     output_dir = os.path.join('./experiments', opts.task, f'{dataset_name}_model_zoo_as_finite_hypothesis')
+    log_files_pth = os.path.join(output_dir, 'per_adapter')
 
     print("Loading Model")
     original_model = AutoModelForSeq2SeqLM.from_pretrained(opts.model_name)
@@ -126,7 +127,9 @@ if __name__ == '__main__':
         for user_id in tqdm(range(num_tasks), desc='User', position=0):
             profile_data = profiles_data[user_id]              
             metrics = trainer.evaluate(profile_data)
-            results[user_id] = metrics
+            results[f'user_{user_id}'] = metrics
 
-        with open(os.path.join(output_dir, 'per_adapter', f'{opts.exp_prefix}results_adapter_{adapter_id}.json'), 'w') as file:
+        if not os.path.exists(log_files_pth):
+            os.makedirs(log_files_pth)
+        with open(os.path.join(log_files_pth, f'{opts.exp_prefix}results_adapter_{adapter_id}.json'), 'w') as file:
             json.dump(results, file, indent = 4)

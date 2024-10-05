@@ -41,6 +41,7 @@ if __name__ == '__main__':
     opts = parser.parse_args()
     dataset_name = opts.data_addr.split('/')[-1].split('.')[0]
     output_dir = os.path.join('./experiments', opts.task, f'{dataset_name}_model_zoo_as_finite_hypothesis')
+    log_files_pth = os.path.join(output_dir, 'per_user')
 
     print("Loading Model")
     original_model = AutoModelForSeq2SeqLM.from_pretrained(opts.model_name)
@@ -161,11 +162,13 @@ if __name__ == '__main__':
 
         # log user final results
         txt_prediction = tokenizer.decode(tokenized_prediction, skip_special_tokens=True)
-        with open(os.path.join(output_dir, 'per_user', f'{opts.exp_prefix}results_user_{user_id}.json'), 'w') as file:
+        if not os.path.exists(log_files_pth):
+            os.makedirs(log_files_pth)
+        with open(os.path.join(log_files_pth, f'{opts.exp_prefix}results_user_{user_id}.json'), 'w') as file:
             json.dump({
                 'user_ids': user_id,
-                'labels': txt_labels[-1],
-                'preds': txt_prediction,
+                'label': txt_labels[-1],
+                'pred': txt_prediction,
                 'best_adapter_ids': best_adapter_id,
                 'user_train_perfs': user_train_perf,
                 'best_train_metric': best_train_metric
