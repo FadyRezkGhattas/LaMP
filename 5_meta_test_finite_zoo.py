@@ -28,7 +28,7 @@ parser.add_argument("--data_addr", default="./data_raw/user/LaMP_2/dev_questions
 parser.add_argument("--model_name", default='./experiments/LaMP-2/finetune_all_train_user_profiles/checkpoint-32000')
 parser.add_argument("--task", default='LaMP-2')
 parser.add_argument("--rank", type=int, default=6)
-parser.add_argument("--per_device_batch_size", type = int, default = 16)
+parser.add_argument("--per_device_batch_size", type = int, default = 32)
 parser.add_argument("--max_length", type = int, default = 512)
 parser.add_argument("--max_generation_length", type = int, default = 128)
 parser.add_argument("--generation_num_beams", type = int, default = 4)
