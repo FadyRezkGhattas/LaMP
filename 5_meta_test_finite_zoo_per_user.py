@@ -95,7 +95,7 @@ if __name__ == '__main__':
     txt_labels = [] # shape: number_users x 1
     best_adapter_ids = [] # shape: number_users x 1
     user_train_perfs = [] # shape: number_users x num_adapters performance of adapters on user profiles
-    best_train_metrics = []
+    best_train_metrics = [] # shape: number_users x1
     collator = DataCollatorForSeq2Seq(tokenizer = tokenizer, model = original_model)
     num_tasks = opts.num_tasks if opts.num_tasks != -1 else len(user_data)
     for user_id in tqdm(range(num_tasks), desc='User', position=0):
@@ -159,6 +159,18 @@ if __name__ == '__main__':
         user_train_perfs.append(user_train_perf)
         best_train_metrics.append(best_train_metric)
 
+        # log user final results
+        txt_prediction = tokenizer.decode(tokenized_prediction, skip_special_tokens=True)
+        with open(os.path.join(output_dir, 'per_user', f'{opts.exp_prefix}results_user_{user_id}.json'), 'w') as file:
+            json.dump({
+                'user_ids': user_id,
+                'labels': txt_labels[-1],
+                'preds': txt_prediction,
+                'best_adapter_ids': best_adapter_id,
+                'user_train_perfs': user_train_perf,
+                'best_train_metric': best_train_metric
+            }, file, indent = 4)
+
     txt_predictions = tokenizer.batch_decode(tokenized_predictions, skip_special_tokens=True)
     
     tokenized_labels = tokenizer(txt_labels)['input_ids']
@@ -173,5 +185,6 @@ if __name__ == '__main__':
             'labels':txt_labels,
             'preds': txt_predictions,
             'best_adapter_ids': best_adapter_ids,
-            'user_train_perfs': user_train_perfs
+            'user_train_perfs': user_train_perfs,
+            'best_train_metrics': best_train_metrics
         }, file, indent = 4)
