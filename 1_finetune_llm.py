@@ -8,6 +8,7 @@ from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, Seq2SeqTrainer, S
 
 from metrics.utils import get_metrics
 
+from peft import LoraConfig, get_peft_model
 from prompts.prompts import create_prompt_generator as create_prompt_generator_val
 from prompts.singular_prompts import create_prompt_generator as create_prompt_generator_train
 from data.datasets import GeneralSeq2SeqDataset, GeneralSeq2SeqProfilesDataset, get_all_labels, create_preprocessor, convert_to_hf_dataset
@@ -31,7 +32,9 @@ parser.add_argument("--generation_num_beams", type = int, default = 4)
 parser.add_argument("--num_retrieved", type = int, default=4)
 parser.add_argument("--gradient_accumulation_steps", type = int, default = 1)
 parser.add_argument("--cache_dir", default = "./cache")
-
+parser.add_argument("--use_lora", default=False)
+parser.add_argument("--lora_alpha", default=16)
+parser.add_argument("--rank", default=6)
 
 if __name__ == "__main__":
     opts = parser.parse_args()
@@ -42,6 +45,19 @@ if __name__ == "__main__":
     model = AutoModelForSeq2SeqLM.from_pretrained(opts.model_name, cache_dir=opts.cache_dir)
     tokenizer = AutoTokenizer.from_pretrained(opts.model_name, cache_dir=opts.cache_dir)
     collator = DataCollatorForSeq2Seq(tokenizer = tokenizer, model = model)
+
+    # prepare model for PEFTing
+    if opts.use_lora:
+        config = LoraConfig(
+            r=opts.rank,
+            target_modules=["q", "v"],
+            task_type="SEQ_2_SEQ_LM", # assuming a decoder-only model in this example
+            lora_alpha=opts.lora_alpha,
+            use_rslora=True
+            )
+        model = get_peft_model(model, config)
+        model.print_trainable_parameters()
+
 
     print("[bold magenta]Step 1: Loading data and metrics...[/bold magenta]")
     task = opts.task
