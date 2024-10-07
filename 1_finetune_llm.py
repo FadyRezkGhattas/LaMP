@@ -32,9 +32,9 @@ parser.add_argument("--generation_num_beams", type = int, default = 4)
 parser.add_argument("--num_retrieved", type = int, default=4)
 parser.add_argument("--gradient_accumulation_steps", type = int, default = 1)
 parser.add_argument("--cache_dir", default = "./cache")
-parser.add_argument("--use_lora", default=False)
-parser.add_argument("--lora_alpha", default=16)
-parser.add_argument("--rank", default=6)
+parser.add_argument("--use_lora", default=False, type=bool)
+parser.add_argument("--lora_alpha", default=16, type=int)
+parser.add_argument("--rank", default=6, type=int)
 
 if __name__ == "__main__":
     opts = parser.parse_args()
