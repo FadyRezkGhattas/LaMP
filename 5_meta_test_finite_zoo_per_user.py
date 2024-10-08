@@ -19,6 +19,10 @@ from lora_xs.initialization_utils import find_and_initialize
 from prompts.singular_prompts import create_prompt_generator
 from data.datasets import GeneralSeq2SeqProfileDataset, create_preprocessor, convert_to_hf_dataset
 
+from diffusion.net import get_model
+from diffusion.gaussian_diffusion import GaussianDiffusion
+from diffusion.sample import greedy_sample
+
 import warnings
 warnings.filterwarnings("ignore")
 
@@ -33,9 +37,15 @@ parser.add_argument("--max_length", type = int, default = 512)
 parser.add_argument("--max_generation_length", type = int, default = 128)
 parser.add_argument("--generation_num_beams", type = int, default = 4)
 parser.add_argument("--cache_dir", default = "./cache")
-parser.add_argument('--lmdb_addr', type=str, default='lmdb_data/LaMP-2-v1')
+parser.add_argument('--lmdb_addr', type=str, default=None)
 parser.add_argument('--num_tasks', type=int, default=-1, help='total number of tasks to evaluate model zoo on. If -1, all users are evaluated.')
 parser.add_argument('--early_stop', type=int, default=1e10, help='how many steps to wait for performance to not improve before skipping the rest of the model zoo')
+
+# diffusion model 
+parser.add_argument('--diff_ckpt', type=str, default='./experiments/LaMP-2/diffusion/LaMP-2_normalize_data_3x_241007_204226/final_ckpt.pt', help='path to diffusion model for sampling model zoo')
+parser.add_argument('--diff_hdim', type=int, default=7680, help='hidden dim of diff net')
+parser.add_argument('--diff_nhids', type=int, default=3, help='num of hidden layers in diff net')
+parser.add_argument('--diff_odim', type=int, default=2592, help='size of input and output dimensionality of the diffusion model')
 
 if __name__ == '__main__':
     opts = parser.parse_args()
@@ -82,9 +92,19 @@ if __name__ == '__main__':
     compute_metrics, best_metric, txt_labels, greater_is_better = get_metrics(task, tokenizer)
     with open(opts.data_addr) as f:
         user_data = json.load(f)
-    model_zoo = LMDBDataset(opts.lmdb_addr)
 
-    print("Tensorizing model zoo")
+    # Loading model zoo
+    if opts.lmdb_addr is not None:
+        model_zoo = LMDBDataset(opts.lmdb_addr)
+    elif opts.diff_ckpt is not None:
+        # load diffusion model
+        diffusion_net = get_model(opts).to('cuda')
+        # load diffusion sampler
+        gaussian_diff = GaussianDiffusion().to('cuda')
+        # sample model zoo
+        model_zoo = greedy_sample(gaussian_diff, diffusion_net)
+    # tensorize model zoo
+    print("Tensorizing finite hypothesis")
     adapters = []
     for i in range(len(model_zoo)):
         adapters.append(tensorize_loraxs_adapter(model_zoo[i]))
