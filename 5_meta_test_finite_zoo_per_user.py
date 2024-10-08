@@ -30,6 +30,8 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--exp_prefix", default="")
 parser.add_argument("--data_addr", default="./data_raw/user/LaMP_2/dev_questions_merged.json")
 parser.add_argument("--model_name", default='./experiments/LaMP-2/finetune_all_train_user_profiles/checkpoint-32000')
+parser.add_argument("--from_user_id", type=int, default=0, help="Train model starting from this user index.")
+parser.add_argument("--to_user_id", type=int, default=-1, help="Terminate training at this user index. If -1, train until end of available users.")
 parser.add_argument("--task", default='LaMP-2')
 parser.add_argument("--rank", type=int, default=6)
 parser.add_argument("--per_device_batch_size", type = int, default = 64)
@@ -119,8 +121,9 @@ if __name__ == '__main__':
     user_train_perfs = [] # shape: number_users x num_adapters performance of adapters on user profiles
     best_train_metrics = [] # shape: number_users x1
     collator = DataCollatorForSeq2Seq(tokenizer = tokenizer, model = original_model)
-    num_tasks = opts.num_tasks if opts.num_tasks != -1 else len(user_data)
-    for user_id in tqdm(range(num_tasks), desc='User', position=0):
+    task_counter = 0
+    from_, to_ = opts.from_user_id, opts.to_user_id if opts.to_user_id != -1 else len(user_data)
+    for user_id in range(from_, to_):
         user_ids.append(user_id)
         user_train_perf = [] # shape: num_adapters
         # load user profile and query
@@ -194,7 +197,9 @@ if __name__ == '__main__':
                 'user_train_perfs': user_train_perf,
                 'best_train_metric': best_train_metric
             }, file, indent = 4)
-
+        task_counter += 1
+        if task_counter == opts.num_tasks:
+            break
     txt_predictions = tokenizer.batch_decode(tokenized_predictions, skip_special_tokens=True)
     
     tokenized_labels = tokenizer(txt_labels)['input_ids']
