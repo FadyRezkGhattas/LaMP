@@ -98,7 +98,7 @@ def train_val_split(dataset, val_size):
     return train_dataset, val_dataset
 
 class GeneralSeq2SeqProfilesDataset(Dataset):
-    def __init__(self, task, create_prompt, data=None, data_addr=None) -> None:
+    def __init__(self, task, create_prompt, data=None, data_addr=None, truncate_profile_size=-1) -> None:
         """
         Loads dataset from file or from address. Aggregates all user profiles as data[pomts/]
 
@@ -107,6 +107,7 @@ class GeneralSeq2SeqProfilesDataset(Dataset):
             - **create_prompt** (function) : Function that creates a prompt for each sample.
             - **data** (a list of dict) : Data to use for this dataset. If given, it's assumed to be a single user.
             - **data_addr** (str) : Path to the data file.
+            - **truncate_profile_size** (int): The number of max samples to include from a user's profile. Ignored if < 1.
         
         Returns:
             A dictionary containing the loaded dataset and its metadata
@@ -130,7 +131,10 @@ class GeneralSeq2SeqProfilesDataset(Dataset):
             data = data
         self.data = []
         for user in tqdm(data, desc="Mering all profiles"):
-            self.data += user['profile']
+            if truncate_profile_size > 0 and len(user['profile']) <= truncate_profile_size:
+                self.data += user['profile'][:truncate_profile_size]
+            else:
+                self.data += user['profile']
         self.i_key, self.o_key = get_io_keys(self.task)
 
     def __getitem__(self, index):
@@ -144,7 +148,7 @@ class GeneralSeq2SeqProfilesDataset(Dataset):
         return len(self.data)
 
 class GeneralSeq2SeqProfileDataset(Dataset):
-    def __init__(self, task, create_prompt, val=False, user_id=None, data=None, data_addr=None) -> None:
+    def __init__(self, task, create_prompt, val=False, user_id=None, data=None, data_addr=None, truncate_profile_size=-1) -> None:
         """
         Loads dataset for specified task and user.
 
@@ -155,6 +159,7 @@ class GeneralSeq2SeqProfileDataset(Dataset):
             - **user_id** (int) : ID of the user to load data from. Defaults to None.
             - **data** (a list of dict) : Data to use for this dataset. If given, it's assumed to be a single user.
             - **data_addr** (str) : Path to the data file.
+            - **truncate_profile_size** (int): The number of max samples to include from a user's profile. Ignored if < 1.
         
         Returns:
             A dictionary containing the loaded dataset and its metadata
@@ -180,6 +185,9 @@ class GeneralSeq2SeqProfileDataset(Dataset):
         elif data is not None:
             self.data = data
         self.i_key, self.o_key = get_io_keys(self.task)
+
+        if truncate_profile_size > 0 and len(self.data) <= truncate_profile_size:
+            self.data['profile'] = self.data['profile'][:truncate_profile_size]
 
     def __getitem__(self, index):
         if not self.val:

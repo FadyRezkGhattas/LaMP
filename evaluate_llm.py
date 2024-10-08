@@ -18,6 +18,7 @@ parser.add_argument('--exp_name', type=str, default="dev_query")
 parser.add_argument("--data_addr", default="./data_raw/user/LaMP_2/dev_questions_merged.json")
 parser.add_argument("--subset", choices=['profile', 'query'], default='query', help="Whether to evaluate on user profiles or queries")
 parser.add_argument("--model_name", default='./experiments/LaMP-2/finetune_all_train_user_profiles/checkpoint-32000')
+parser.add_argument('--truncate_profile_size', type=int, default=-1, help='if > 0, then the profile size is truncated to max of given value.')
 parser.add_argument("--task", default='LaMP-2')
 parser.add_argument("--output_dir", default='./experiments')
 parser.add_argument("--per_device_batch_size", type = int, default = 16)
@@ -49,7 +50,7 @@ if __name__ == "__main__":
         dataset = GeneralSeq2SeqDataset(opts.data_addr, True, opts.task, prompt_generator)
     elif opts.subset == 'profile':
         prompt_generator = create_prompt_generator_profile(tokenizer)
-        dataset = GeneralSeq2SeqProfilesDataset(opts.task, prompt_generator, data_addr=opts.data_addr)
+        dataset = GeneralSeq2SeqProfilesDataset(opts.task, prompt_generator, data_addr=opts.data_addr, truncate_profile_size=opts.truncate_profile_size)
     
     if opts.model_zoo_addr is not None:
         users = os.listdir(opts.model_zoo_addr)

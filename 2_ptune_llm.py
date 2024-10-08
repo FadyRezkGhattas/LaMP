@@ -24,6 +24,7 @@ parser.add_argument('--exp_prefix', type=str, default="test/")
 parser.add_argument("--num_tasks", type=int, default=-1, help="Train for fixed number of tasks. If -1, then train for all available tasks.")
 parser.add_argument("--from_user_id", type=int, default=0, help="Train model starting from this user index.")
 parser.add_argument("--to_user_id", type=int, default=-1, help="Terminate training at this user index. If -1, train until end of available users.")
+parser.add_argument('--truncate_profile_size', type=int, default=-1, help='if > 0, then the profile size is truncated to max of given value.')
 parser.add_argument("--data_addr", default="./data_raw/user/LaMP_2/train_questions_merged.json")
 parser.add_argument("--model_name", default='./experiments/LaMP-2/finetune_all_train_user_profiles/checkpoint-32000')
 parser.add_argument("--svd_pth", default='./experiments/fixed_adapter')
@@ -106,7 +107,7 @@ if __name__ == "__main__":
         prompt_generator = create_prompt_generator(tokenizer)
 
         # Profile data for training
-        train_dataset = GeneralSeq2SeqProfileDataset(task, prompt_generator, data=data[user_id])
+        train_dataset = GeneralSeq2SeqProfileDataset(task, prompt_generator, data=data[user_id], truncate_profile_size=opts.truncate_profile_size)
         # Query sample to eval on
         test_dataset = GeneralSeq2SeqProfileDataset(task, prompt_generator, data=data[user_id], val=True)
         

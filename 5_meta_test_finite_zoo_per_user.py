@@ -32,7 +32,7 @@ parser.add_argument("--data_addr", default="./data_raw/user/LaMP_2/dev_questions
 parser.add_argument("--model_name", default='./experiments/LaMP-2/finetune_all_train_user_profiles/checkpoint-32000')
 parser.add_argument("--task", default='LaMP-2')
 parser.add_argument("--rank", type=int, default=6)
-parser.add_argument("--per_device_batch_size", type = int, default = 32)
+parser.add_argument("--per_device_batch_size", type = int, default = 64)
 parser.add_argument("--max_length", type = int, default = 512)
 parser.add_argument("--max_generation_length", type = int, default = 128)
 parser.add_argument("--generation_num_beams", type = int, default = 4)
@@ -40,6 +40,7 @@ parser.add_argument("--cache_dir", default = "./cache")
 parser.add_argument('--lmdb_addr', type=str, default=None)
 parser.add_argument('--num_tasks', type=int, default=-1, help='total number of tasks to evaluate model zoo on. If -1, all users are evaluated.')
 parser.add_argument('--early_stop', type=int, default=1e10, help='how many steps to wait for performance to not improve before skipping the rest of the model zoo')
+parser.add_argument('--truncate_profile_size', type=int, default=-1, help='if > 0, then the profile size is truncated to max of given value.')
 
 # diffusion model 
 parser.add_argument('--diff_ckpt', type=str, default='./experiments/LaMP-2/diffusion/LaMP-2_normalize_data_3x_241007_204226/final_ckpt.pt', help='path to diffusion model for sampling model zoo')
@@ -123,7 +124,7 @@ if __name__ == '__main__':
         user_ids.append(user_id)
         user_train_perf = [] # shape: num_adapters
         # load user profile and query
-        profile_data = GeneralSeq2SeqProfileDataset(task, prompt_generator, val=False, user_id=user_id, data=user_data[user_id])
+        profile_data = GeneralSeq2SeqProfileDataset(task, prompt_generator, val=False, user_id=user_id, data=user_data[user_id], truncate_profile_size=opts.truncate_profile_size)
         profile_data = convert_to_hf_dataset(profile_data, cache_dir = opts.cache_dir).map(create_preprocessor(tokenizer = tokenizer, max_length = opts.max_length), batched=True)
         query_data = GeneralSeq2SeqProfileDataset(task, prompt_generator, val=True, user_id=user_id, data=user_data[user_id])
         txt_labels.append(query_data[0]['target'])
