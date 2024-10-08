@@ -27,7 +27,7 @@ import warnings
 warnings.filterwarnings("ignore")
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--exp_prefix", default="")
+parser.add_argument("--exp_name", default="diff", help="used to log results in ./experiments/{task}/{dataset_name}_stage_4_{exp_name}")
 parser.add_argument("--data_addr", default="./data_raw/user/LaMP_2/dev_questions_merged.json")
 parser.add_argument("--model_name", default='./experiments/LaMP-2/finetune_all_train_user_profiles/checkpoint-32000')
 parser.add_argument("--from_user_id", type=int, default=0, help="Train model starting from this user index.")
@@ -53,7 +53,7 @@ parser.add_argument('--diff_odim', type=int, default=2592, help='size of input a
 if __name__ == '__main__':
     opts = parser.parse_args()
     dataset_name = opts.data_addr.split('/')[-1].split('.')[0]
-    output_dir = os.path.join('./experiments', opts.task, f'{dataset_name}_model_zoo_as_finite_hypothesis')
+    output_dir = os.path.join('./experiments', opts.task, f'{dataset_name}_stage_4_{opts.exp_name}')
     log_files_pth = os.path.join(output_dir, 'per_user')
 
     print("Loading Model")
