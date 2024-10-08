@@ -131,7 +131,7 @@ class GeneralSeq2SeqProfilesDataset(Dataset):
             data = data
         self.data = []
         for user in tqdm(data, desc="Mering all profiles"):
-            if truncate_profile_size > 0 and len(user['profile']) <= truncate_profile_size:
+            if truncate_profile_size > 0 and len(user['profile']) > truncate_profile_size:
                 self.data += user['profile'][:truncate_profile_size]
             else:
                 self.data += user['profile']
@@ -186,7 +186,7 @@ class GeneralSeq2SeqProfileDataset(Dataset):
             self.data = data
         self.i_key, self.o_key = get_io_keys(self.task)
 
-        if truncate_profile_size > 0 and len(self.data) <= truncate_profile_size:
+        if truncate_profile_size > 0 and len(self.data['profile']) > truncate_profile_size:
             self.data['profile'] = self.data['profile'][:truncate_profile_size]
 
     def __getitem__(self, index):
