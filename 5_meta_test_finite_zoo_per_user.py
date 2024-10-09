@@ -147,7 +147,8 @@ if __name__ == '__main__':
             predict_with_generate = True,
             eval_accumulation_steps = 1,
             generation_max_length = opts.max_generation_length,
-            disable_tqdm=True
+            disable_tqdm=True,
+            fp16=True
         )
         trainer = Seq2SeqTrainer(
             model = original_model,
