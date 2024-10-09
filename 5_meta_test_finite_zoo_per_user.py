@@ -39,12 +39,14 @@ parser.add_argument("--max_length", type = int, default = 512)
 parser.add_argument("--max_generation_length", type = int, default = 128)
 parser.add_argument("--generation_num_beams", type = int, default = 4)
 parser.add_argument("--cache_dir", default = "./cache")
-parser.add_argument('--lmdb_addr', type=str, default=None)
 parser.add_argument('--num_tasks', type=int, default=-1, help='total number of tasks to evaluate model zoo on. If -1, all users are evaluated.')
 parser.add_argument('--early_stop', type=int, default=1e10, help='how many steps to wait for performance to not improve before skipping the rest of the model zoo')
-parser.add_argument('--truncate_profile_size', type=int, default=-1, help='if > 0, then the profile size is truncated to max of given value.')
+parser.add_argument('--truncate_profile_size', type=int, default=64, help='if > 0, then the profile size is truncated to max of given value.')
 
-# diffusion model 
+# diffusion model and model zoo
+parser.add_argument('--use_diffusion', type=bool, default=True)
+parser.add_argument('--reverse_z_score', type=bool, default=True, help='If True, the lmdb dataset statistics are computed to reverse z-score of model')
+parser.add_argument('--lmdb_addr', type=str, default='lmdb_data/LaMP-2-v1')
 parser.add_argument('--diff_ckpt', type=str, default='./experiments/LaMP-2/diffusion/LaMP-2_normalize_data_3x_241007_204226/final_ckpt.pt', help='path to diffusion model for sampling model zoo')
 parser.add_argument('--diff_hdim', type=int, default=7680, help='hidden dim of diff net')
 parser.add_argument('--diff_nhids', type=int, default=3, help='num of hidden layers in diff net')
@@ -89,23 +91,28 @@ if __name__ == '__main__':
     for name, param in original_model.named_parameters():
         param.contiguous()
 
-    print("loading Dataset")
-    # Load all users data    
+    # Load all users data
+    print("Loading Dataset")
     task = opts.task
     compute_metrics, best_metric, txt_labels, greater_is_better = get_metrics(task, tokenizer)
     with open(opts.data_addr) as f:
         user_data = json.load(f)
 
     # Loading model zoo
-    if opts.lmdb_addr is not None:
-        model_zoo = LMDBDataset(opts.lmdb_addr)
-    elif opts.diff_ckpt is not None:
+    print("Loading/Sampling Adapters")
+    if opts.use_diffusion:
         # load diffusion model
         diffusion_net = get_model(opts).to('cuda')
         # load diffusion sampler
         gaussian_diff = GaussianDiffusion().to('cuda')
         # sample model zoo
         model_zoo = greedy_sample(gaussian_diff, diffusion_net)
+        # reverse batch z-score if necessary
+        if opts.reverse_z_score:
+            mean, std = LMDBDataset(opts.lmdb_addr).get_data_stats()
+            model_zoo = [mean + (x*std) for x in model_zoo]
+    else:
+        model_zoo = LMDBDataset(opts.lmdb_addr)
     # tensorize model zoo
     print("Tensorizing finite hypothesis")
     adapters = []
