@@ -20,8 +20,8 @@ class LMDBDataset(Dataset):
         for i in range(len(self.reader)):
             vecs.append(self._read_element(i))
         vecs = torch.stack(vecs)
-        means = torch.mean(vecs)
-        std = torch.std(vecs)
+        means = torch.mean(vecs, dim=0)
+        std = torch.std(vecs, dim=0)
         return means, std
 
     def _read_element(self, index):
