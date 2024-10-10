@@ -149,7 +149,7 @@ if __name__ == '__main__':
             do_eval = True,
             per_device_eval_batch_size = opts.per_device_batch_size,
             generation_num_beams = 1,
-            predict_with_generate = True,
+            predict_with_generate = False,
             eval_accumulation_steps = 1,
             generation_max_length = opts.max_generation_length,
             disable_tqdm=True,
@@ -161,7 +161,7 @@ if __name__ == '__main__':
             data_collator = collator,
             eval_dataset = profile_data,
             tokenizer = tokenizer,
-            compute_metrics = compute_metrics
+            compute_metrics = None
         )
         trainer.remove_callback(PrinterCallback)
 
@@ -170,8 +170,9 @@ if __name__ == '__main__':
             _ = original_model.load_state_dict(adapters[adapter_id], strict=False)
             
             results = trainer.evaluate(profile_data)
-            adapter_selection_metric_val = results['eval_'+best_metric]
+            adapter_selection_metric_val = results['eval_loss']
             
+            greater_is_better = False
             if greater_is_better:
                 best_flag = (len(user_train_perf)==0) or (adapter_selection_metric_val > np.max(user_train_perf))
             else:
