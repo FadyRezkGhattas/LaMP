@@ -3,6 +3,7 @@ import yaml
 import json
 import argparse
 from tqdm import tqdm
+from pathlib import Path
 
 import numpy as np
 import torch
@@ -135,7 +136,9 @@ if __name__ == '__main__':
     collator = DataCollatorForSeq2Seq(tokenizer = tokenizer, model = original_model)
     task_counter = 0
     from_, to_ = opts.from_user_id, opts.to_user_id if opts.to_user_id != -1 else len(user_data)
-    for user_id in range(from_, to_):
+    for user_id in tqdm(range(from_, to_), leave=True, desc='Adapters', position=0):
+        if Path(os.path.join(log_files_pth, f'{opts.exp_name}results_user_{user_id}.json')).is_file():
+            continue
         user_ids.append(user_id)
         user_train_perf = [] # shape: num_adapters
         # load user profile and query
