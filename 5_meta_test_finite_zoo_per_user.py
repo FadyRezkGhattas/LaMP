@@ -30,6 +30,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--exp_name", default="diff", help="used to log results in ./experiments/{task}/{dataset_name}_stage_4_{exp_name}")
 parser.add_argument("--data_addr", default="./data_raw/user/LaMP_2/dev_questions_merged.json")
 parser.add_argument("--model_name", default='./experiments/LaMP-2/finetune_all_train_user_profiles/checkpoint-32000')
+parser.add_argument("--use_bf16", default=True)
 parser.add_argument("--from_user_id", type=int, default=0, help="Train model starting from this user index.")
 parser.add_argument("--to_user_id", type=int, default=-1, help="Terminate training at this user index. If -1, train until end of available users.")
 parser.add_argument("--task", default='LaMP-2')
@@ -90,6 +91,9 @@ if __name__ == '__main__':
     original_model.eval()
     for name, param in original_model.named_parameters():
         param.contiguous()
+    # converting to bf16 after initializing lora-xs because sklearn svd does not support bf16 dtype
+    if opts.use_bf16:
+        original_model = original_model.bfloat16()
 
     # Load all users data
     print("Loading Dataset")
@@ -110,14 +114,15 @@ if __name__ == '__main__':
         # reverse batch z-score if necessary
         if opts.reverse_z_score:
             mean, std = LMDBDataset(opts.lmdb_addr).get_data_stats()
-            model_zoo = [mean + (x*std) for x in model_zoo]
+            device = model_zoo[0].device
+            model_zoo = [mean.to(device) + (x*std.to(device)) for x in model_zoo]
     else:
         model_zoo = LMDBDataset(opts.lmdb_addr)
     # tensorize model zoo
     print("Tensorizing finite hypothesis")
     adapters = []
     for i in range(len(model_zoo)):
-        adapters.append(tensorize_loraxs_adapter(model_zoo[i]))
+        adapters.append(tensorize_loraxs_adapter(model_zoo[i], use_bf16=opts.use_bf16))
 
     prompt_generator = create_prompt_generator(tokenizer)
     
@@ -143,12 +148,12 @@ if __name__ == '__main__':
             output_dir = output_dir,
             do_eval = True,
             per_device_eval_batch_size = opts.per_device_batch_size,
-            generation_num_beams = opts.generation_num_beams,
+            generation_num_beams = 1,
             predict_with_generate = True,
             eval_accumulation_steps = 1,
             generation_max_length = opts.max_generation_length,
             disable_tqdm=True,
-            fp16=True
+            bf16=opts.use_bf16
         )
         trainer = Seq2SeqTrainer(
             model = original_model,
