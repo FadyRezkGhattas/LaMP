@@ -1,7 +1,7 @@
 import torch
 from safetensors import safe_open
 
-def tensorize_loraxs_adapter(adapter_vector, rank=6, cuda=True):
+def tensorize_loraxs_adapter(adapter_vector, rank=6, cuda=True, use_bf16=True):
     keys = [
         'base_model.model.decoder.block.0.layer.0.SelfAttention.q.default_lora_latent_mapping.weight',
         'base_model.model.decoder.block.0.layer.0.SelfAttention.v.default_lora_latent_mapping.weight',
@@ -83,7 +83,9 @@ def tensorize_loraxs_adapter(adapter_vector, rank=6, cuda=True):
         end = min(start + rank * rank, len(adapter_vector))
         tensor = adapter_vector[start:end].detach().clone().requires_grad_(False)
         tensor = tensor.reshape(rank, rank)
-        adapter[keys[i]] = tensor.to('cuda').contiguous() if cuda else tensor
+        tensor = tensor.to('cuda').contiguous() if cuda else tensor
+        tensor = tensor.bfloat16() if use_bf16 else tensor
+        adapter[keys[i]] = tensor
         start += rank * rank
         i += 1
     return adapter
