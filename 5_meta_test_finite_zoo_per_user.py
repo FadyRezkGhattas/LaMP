@@ -45,7 +45,7 @@ parser.add_argument('--early_stop', type=int, default=1e10, help='how many steps
 parser.add_argument('--truncate_profile_size', type=int, default=64, help='if > 0, then the profile size is truncated to max of given value.')
 
 # diffusion model and model zoo
-parser.add_argument('--use_diffusion', type=bool, default=True)
+parser.add_argument('--use_diffusion', type=bool, default=False)
 parser.add_argument('--reverse_z_score', type=bool, default=True, help='If True, the lmdb dataset statistics are computed to reverse z-score of model')
 parser.add_argument('--lmdb_addr', type=str, default='lmdb_data/LaMP-2-v1')
 parser.add_argument('--diff_ckpt', type=str, default='./experiments/LaMP-2/diffusion/LaMP-2_normalize_data_3x_241007_204226/final_ckpt.pt', help='path to diffusion model for sampling model zoo')
@@ -202,7 +202,7 @@ if __name__ == '__main__':
         txt_prediction = tokenizer.decode(tokenized_prediction, skip_special_tokens=True)
         if not os.path.exists(log_files_pth):
             os.makedirs(log_files_pth)
-        with open(os.path.join(log_files_pth, f'{opts.exp_prefix}results_user_{user_id}.json'), 'w') as file:
+        with open(os.path.join(log_files_pth, f'{opts.exp_name}results_user_{user_id}.json'), 'w') as file:
             json.dump({
                 'user_ids': user_id,
                 'label': txt_labels[-1],
@@ -221,7 +221,7 @@ if __name__ == '__main__':
     results = compute_metrics((tokenized_predictions, tokenized_labels))
     print(results)
     
-    with open(os.path.join(output_dir, f'{opts.exp_prefix}results.json'), 'w') as file:
+    with open(os.path.join(output_dir, f'{opts.exp_name}results.json'), 'w') as file:
         json.dump({
             **results,
             'user_ids':user_ids,
