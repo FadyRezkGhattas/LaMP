@@ -44,6 +44,8 @@ parser.add_argument("--cache_dir", default = "./cache")
 parser.add_argument('--num_tasks', type=int, default=-1, help='total number of tasks to evaluate model zoo on. If -1, all users are evaluated.')
 parser.add_argument('--early_stop', type=int, default=1e10, help='how many steps to wait for performance to not improve before skipping the rest of the model zoo')
 parser.add_argument('--truncate_profile_size', type=int, default=64, help='if > 0, then the profile size is truncated to max of given value.')
+parser.add_argument('--selection_metric', type=str, choices=['loss', 'best_metric'], default='loss', help='Whether to use support loss for adapter selection or dataset specific metric (best_metric)')
+parser.add_argument('--track_query', default=True, help='Whether to calculate query for every adapter. Computationally expensive for selection_metric=`best_metric`')
 
 # diffusion model and model zoo
 parser.add_argument('--use_diffusion', type=bool, default=False)
@@ -100,6 +102,10 @@ if __name__ == '__main__':
     print("Loading Dataset")
     task = opts.task
     compute_metrics, best_metric, txt_labels, greater_is_better = get_metrics(task, tokenizer)
+    predict_with_generate = True
+    if opts.selection_metric == 'loss':
+        compute_metrics, greater_is_better, best_metric, predict_with_generate = None, False, 'loss', False
+
     with open(opts.data_addr) as f:
         user_data = json.load(f)
 
@@ -131,28 +137,31 @@ if __name__ == '__main__':
     tokenized_predictions = [] # shape: number_users x 1
     txt_labels = [] # shape: number_users x 1
     best_adapter_ids = [] # shape: number_users x 1
-    user_train_perfs = [] # shape: number_users x num_adapters performance of adapters on user profiles
+    support_performance_all_users = [] # shape: number_users x num_adapters performance of adapters on user profiles
     best_train_metrics = [] # shape: number_users x1
     collator = DataCollatorForSeq2Seq(tokenizer = tokenizer, model = original_model)
     task_counter = 0
     from_, to_ = opts.from_user_id, opts.to_user_id if opts.to_user_id != -1 else len(user_data)
-    for user_id in tqdm(range(from_, to_), leave=True, desc='Adapters', position=0):
+    for user_id in tqdm(range(from_, to_), leave=True, desc='Users', position=0):
         if Path(os.path.join(log_files_pth, f'{opts.exp_name}results_user_{user_id}.json')).is_file():
             continue
         user_ids.append(user_id)
-        user_train_perf = [] # shape: num_adapters
+        user_support_perf = [] # shape: num_adapters
+        user_query_perf = [] # shape: num_adapters x1
+
         # load user profile and query
         profile_data = GeneralSeq2SeqProfileDataset(task, prompt_generator, val=False, user_id=user_id, data=user_data[user_id], truncate_profile_size=opts.truncate_profile_size)
         profile_data = convert_to_hf_dataset(profile_data, cache_dir = opts.cache_dir).map(create_preprocessor(tokenizer = tokenizer, max_length = opts.max_length), batched=True)
         query_data = GeneralSeq2SeqProfileDataset(task, prompt_generator, val=True, user_id=user_id, data=user_data[user_id])
         txt_labels.append(query_data[0]['target'])
+        query_data = convert_to_hf_dataset(query_data, cache_dir = opts.cache_dir).map(create_preprocessor(tokenizer = tokenizer, max_length = opts.max_length), batched=True)
 
         training_args = Seq2SeqTrainingArguments(
             output_dir = output_dir,
             do_eval = True,
             per_device_eval_batch_size = opts.per_device_batch_size,
-            generation_num_beams = 1,
-            predict_with_generate = False,
+            generation_num_beams = opts.generation_num_beams,
+            predict_with_generate = predict_with_generate,
             eval_accumulation_steps = 1,
             generation_max_length = opts.max_generation_length,
             disable_tqdm=True,
@@ -164,7 +173,7 @@ if __name__ == '__main__':
             data_collator = collator,
             eval_dataset = profile_data,
             tokenizer = tokenizer,
-            compute_metrics = None
+            compute_metrics = compute_metrics
         )
         trainer.remove_callback(PrinterCallback)
 
@@ -173,13 +182,18 @@ if __name__ == '__main__':
             _ = original_model.load_state_dict(adapters[adapter_id], strict=False)
             
             results = trainer.evaluate(profile_data)
-            adapter_selection_metric_val = results['eval_loss']
-            
-            greater_is_better = False
-            if greater_is_better:
-                best_flag = (len(user_train_perf)==0) or (adapter_selection_metric_val > np.max(user_train_perf))
+            adapter_selection_metric_val = results['eval_'+best_metric]
+
+            if opts.track_query:
+                results = trainer.evaluate(query_data)
+                query_perf = results['eval_'+best_metric]
             else:
-                best_flag = (len(user_train_perf)==0) or (adapter_selection_metric_val < np.min(user_train_perf))
+                query_perf = None
+            
+            if greater_is_better:
+                best_flag = (len(user_support_perf)==0) or (adapter_selection_metric_val > np.max(user_support_perf))
+            else:
+                best_flag = (len(user_support_perf)==0) or (adapter_selection_metric_val < np.min(user_support_perf))
 
             if best_flag:
                 best_train_metric = adapter_selection_metric_val
@@ -189,16 +203,17 @@ if __name__ == '__main__':
                 outputs = outputs.to('cpu')
                 tokenized_prediction = F.pad(outputs[0], (tokenizer.pad_token_id, opts.max_generation_length - len(outputs[0])))
 
-            user_train_perf.append(adapter_selection_metric_val)
+            user_support_perf.append(adapter_selection_metric_val)
+            user_query_perf.append(query_perf)
             
-            if len(user_train_perf)>opts.early_stop:
-                early_stop = all(x <= best_train_metric for x in user_train_perf[-opts.early_stop:]) if greater_is_better else all(x >= best_train_metric for x in user_train_perf[-opts.early_stop:])
+            if len(user_support_perf)>opts.early_stop:
+                early_stop = all(x <= best_train_metric for x in user_support_perf[-opts.early_stop:]) if greater_is_better else all(x >= best_train_metric for x in user_support_perf[-opts.early_stop:])
                 if early_stop:
                     break
         
         tokenized_predictions.append(tokenized_prediction)
         best_adapter_ids.append(best_adapter_id)
-        user_train_perfs.append(user_train_perf)
+        support_performance_all_users.append(user_support_perf)
         best_train_metrics.append(best_train_metric)
 
         # log user final results
@@ -211,7 +226,8 @@ if __name__ == '__main__':
                 'label': txt_labels[-1],
                 'pred': txt_prediction,
                 'best_adapter_ids': best_adapter_id,
-                'user_train_perfs': user_train_perf,
+                'user_train_perfs': user_support_perf,
+                'query_losses': user_query_perf,
                 'best_train_metric': best_train_metric
             }, file, indent = 4)
         task_counter += 1
@@ -231,6 +247,6 @@ if __name__ == '__main__':
             'labels':txt_labels,
             'preds': txt_predictions,
             'best_adapter_ids': best_adapter_ids,
-            'user_train_perfs': user_train_perfs,
+            'user_train_perfs': support_performance_all_users,
             'best_train_metrics': best_train_metrics
         }, file, indent = 4)
