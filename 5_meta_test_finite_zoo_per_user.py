@@ -160,7 +160,7 @@ if __name__ == '__main__':
             output_dir = output_dir,
             do_eval = True,
             per_device_eval_batch_size = opts.per_device_batch_size,
-            generation_num_beams = opts.generation_num_beams,
+            generation_num_beams = 1,
             predict_with_generate = predict_with_generate,
             eval_accumulation_steps = 1,
             generation_max_length = opts.max_generation_length,
@@ -199,7 +199,7 @@ if __name__ == '__main__':
                 best_train_metric = adapter_selection_metric_val
                 best_adapter_id = adapter_id
                 inputs = tokenizer(query_data[0]["source"], truncation=True, max_length=opts.max_length, return_tensors="pt").to('cuda')
-                outputs = original_model.generate(**inputs, num_beams=4, generation_config=generation_config, max_new_tokens=opts.max_generation_length)
+                outputs = original_model.generate(**inputs, num_beams=opts.generation_num_beams, generation_config=generation_config, max_new_tokens=opts.max_generation_length)
                 outputs = outputs.to('cpu')
                 tokenized_prediction = F.pad(outputs[0], (tokenizer.pad_token_id, opts.max_generation_length - len(outputs[0])))
 
