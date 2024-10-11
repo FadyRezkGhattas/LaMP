@@ -45,7 +45,7 @@ parser.add_argument('--num_tasks', type=int, default=-1, help='total number of t
 parser.add_argument('--early_stop', type=int, default=1e10, help='how many steps to wait for performance to not improve before skipping the rest of the model zoo')
 parser.add_argument('--truncate_profile_size', type=int, default=64, help='if > 0, then the profile size is truncated to max of given value.')
 parser.add_argument('--selection_metric', type=str, choices=['loss', 'best_metric'], default='loss', help='Whether to use support loss for adapter selection or dataset specific metric (best_metric)')
-parser.add_argument('--track_query', default=True, help='Whether to calculate query for every adapter. Computationally expensive for selection_metric=`best_metric`')
+parser.add_argument('--track_query', default=False, help='Whether to calculate query for every adapter. Computationally expensive for selection_metric=`best_metric`')
 
 # diffusion model and model zoo
 parser.add_argument('--use_diffusion', type=bool, default=False)
