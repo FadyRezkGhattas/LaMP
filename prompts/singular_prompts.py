@@ -8,7 +8,7 @@ prompts = {
 def create_prompt(inp, tokenizer, task):
     prompt = prompts[task]
     inp = prompt + " " + inp
-    max_in_len = tokenizer.max_model_input_sizes["t5-base"]
+    max_in_len = tokenizer.model_max_length
     tokens = tokenizer(inp, max_length=max_in_len, truncation=True)
     new_text = tokenizer.batch_decode([tokens['input_ids']], skip_special_tokens=True)[0]
     return new_text
