@@ -97,6 +97,7 @@ if __name__ == '__main__':
     # converting to bf16 after initializing lora-xs because sklearn svd does not support bf16 dtype
     if opts.use_bf16:
         original_model = original_model.bfloat16()
+    # original_model = torch.compile(original_model)
 
     # Load all users data
     print("Loading Dataset")
@@ -201,8 +202,6 @@ if __name__ == '__main__':
             results = loss_evaluator.evaluate(profile_data)
             adapter_selection_metric_val = results['eval_loss']
             user_support_perf.append(adapter_selection_metric_val)
-            if adapter_id == 20:
-                break
         
         # evaluate accuracy on these best k adapters
         best_15_adapters_idx = np.argsort(user_support_perf)[:15]
