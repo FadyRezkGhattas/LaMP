@@ -44,8 +44,8 @@ parser.add_argument("--cache_dir", default = "./cache")
 parser.add_argument('--num_tasks', type=int, default=-1, help='total number of tasks to evaluate model zoo on. If -1, all users are evaluated.')
 parser.add_argument('--early_stop', type=int, default=1e10, help='how many steps to wait for performance to not improve before skipping the rest of the model zoo')
 parser.add_argument('--truncate_profile_size', type=int, default=-1, help='if > 0, then the profile size is truncated to max of given value.')
-parser.add_argument('--selection_metric', type=str, choices=['loss', 'best_metric'], default='loss', help='Whether to use support loss for adapter selection or dataset specific metric (best_metric)')
-parser.add_argument('--track_query', default=False, help='Whether to calculate query for every adapter. Computationally expensive for selection_metric=`best_metric`')
+# parser.add_argument('--selection_metric', type=str, choices=['loss', 'best_metric'], default='loss', help='Whether to use support loss for adapter selection or dataset specific metric (best_metric)')
+# parser.add_argument('--track_query', default=False, help='Whether to calculate query for every adapter. Computationally expensive for selection_metric=`best_metric`')
 
 # diffusion model and model zoo
 parser.add_argument('--use_diffusion', type=bool, default=False)
@@ -103,8 +103,8 @@ if __name__ == '__main__':
     task = opts.task
     compute_metrics, best_metric, txt_labels, greater_is_better = get_metrics(task, tokenizer)
     predict_with_generate = True
-    if opts.selection_metric == 'loss':
-        compute_metrics, greater_is_better, best_metric, predict_with_generate = None, False, 'loss', False
+    # if opts.selection_metric == 'loss':
+    #     compute_metrics, greater_is_better, best_metric, predict_with_generate = None, False, 'loss', False
 
     with open(opts.data_addr) as f:
         user_data = json.load(f)
@@ -156,65 +156,77 @@ if __name__ == '__main__':
         txt_labels.append(query_data[0]['target'])
         query_data = convert_to_hf_dataset(query_data, cache_dir = opts.cache_dir).map(create_preprocessor(tokenizer = tokenizer, max_length = opts.max_length), batched=True)
 
-        training_args = Seq2SeqTrainingArguments(
+        support_loss_args = Seq2SeqTrainingArguments(
             output_dir = output_dir,
             do_eval = True,
             per_device_eval_batch_size = opts.per_device_batch_size,
-            generation_num_beams = 1,
-            predict_with_generate = predict_with_generate,
             eval_accumulation_steps = 1,
             generation_max_length = opts.max_generation_length,
             disable_tqdm=True,
             bf16=opts.use_bf16
         )
-        trainer = Seq2SeqTrainer(
+        loss_evaluator = Seq2SeqTrainer(
             model = original_model,
-            args = training_args,
+            args = support_loss_args,
+            data_collator = collator,
+            eval_dataset = profile_data,
+            tokenizer = tokenizer
+        )
+        loss_evaluator.remove_callback(PrinterCallback)
+        
+        support_acc_args = Seq2SeqTrainingArguments(
+            output_dir = output_dir,
+            do_eval = True,
+            per_device_eval_batch_size = opts.per_device_batch_size,
+            generation_num_beams = opts.generation_num_beams,
+            predict_with_generate = True,
+            eval_accumulation_steps = 1,
+            generation_max_length = opts.max_generation_length,
+            disable_tqdm=True,
+            bf16=opts.use_bf16
+        )
+        acc_evaluator = Seq2SeqTrainer(
+            model = original_model,
+            args = support_acc_args,
             data_collator = collator,
             eval_dataset = profile_data,
             tokenizer = tokenizer,
-            compute_metrics = compute_metrics
+            compute_metrics=compute_metrics
         )
-        trainer.remove_callback(PrinterCallback)
+        acc_evaluator.remove_callback(PrinterCallback)
 
         for adapter_id in tqdm(range(len(adapters)), leave=False, desc='Adapters', position=1):
             # insert adapter into model
             _ = original_model.load_state_dict(adapters[adapter_id], strict=False)
-            
-            results = trainer.evaluate(profile_data)
-            adapter_selection_metric_val = results['eval_'+best_metric]
-
-            if opts.track_query:
-                results = trainer.evaluate(query_data)
-                query_perf = results['eval_'+best_metric]
-            else:
-                query_perf = None
-            
-            if greater_is_better:
-                best_flag = (len(user_support_perf)==0) or (adapter_selection_metric_val > np.max(user_support_perf))
-            else:
-                best_flag = (len(user_support_perf)==0) or (adapter_selection_metric_val < np.min(user_support_perf))
-
-            if best_flag:
-                best_train_metric = adapter_selection_metric_val
-                best_adapter_id = adapter_id
-                inputs = tokenizer(query_data[0]["source"], truncation=True, max_length=opts.max_length, return_tensors="pt").to('cuda')
-                outputs = original_model.generate(**inputs, num_beams=opts.generation_num_beams, generation_config=generation_config, max_new_tokens=opts.max_generation_length)
-                outputs = outputs.to('cpu')
-                tokenized_prediction = F.pad(outputs[0], (tokenizer.pad_token_id, opts.max_generation_length - len(outputs[0])))
-
+            results = loss_evaluator.evaluate(profile_data)
+            adapter_selection_metric_val = results['eval_loss']
             user_support_perf.append(adapter_selection_metric_val)
-            user_query_perf.append(query_perf)
-            
-            if len(user_support_perf)>opts.early_stop:
-                early_stop = all(x <= best_train_metric for x in user_support_perf[-opts.early_stop:]) if greater_is_better else all(x >= best_train_metric for x in user_support_perf[-opts.early_stop:])
-                if early_stop:
-                    break
+            if adapter_id == 20:
+                break
         
+        # evaluate accuracy on these best k adapters
+        best_15_adapters_idx = np.argsort(user_support_perf)[:15]
+        best_15_adapters_accuracies = []
+        for adapter_id in tqdm(best_15_adapters_idx, leave=False, desc='Adapters', position=1):
+            # insert adapter into model
+            _ = original_model.load_state_dict(adapters[adapter_id], strict=False)
+            
+            results = acc_evaluator.evaluate(profile_data)
+            adapter_selection_metric_val = results['eval_'+best_metric]
+            best_15_adapters_accuracies.append(adapter_selection_metric_val)
+
+        # find best adapter using max support acc and load
+        best_adapter_id = best_15_adapters_idx[np.argmax(best_15_adapters_accuracies)]
+        _ = original_model.load_state_dict(adapters[best_adapter_id], strict=False)
+        # get query prediction
+        inputs = tokenizer(query_data[0]["source"], truncation=True, max_length=opts.max_length, return_tensors="pt").to('cuda')
+        outputs = original_model.generate(**inputs, num_beams=opts.generation_num_beams, generation_config=generation_config, max_new_tokens=opts.max_generation_length)
+        outputs = outputs.to('cpu')
+        tokenized_prediction = F.pad(outputs[0], (tokenizer.pad_token_id, opts.max_generation_length - len(outputs[0])))
+
         tokenized_predictions.append(tokenized_prediction)
         best_adapter_ids.append(best_adapter_id)
         support_performance_all_users.append(user_support_perf)
-        best_train_metrics.append(best_train_metric)
 
         # log user final results
         txt_prediction = tokenizer.decode(tokenized_prediction, skip_special_tokens=True)
@@ -227,8 +239,7 @@ if __name__ == '__main__':
                 'pred': txt_prediction,
                 'best_adapter_ids': best_adapter_id,
                 'user_train_perfs': user_support_perf,
-                'query_losses': user_query_perf,
-                'best_train_metric': best_train_metric
+                'query_losses': user_query_perf
             }, file, indent = 4)
         task_counter += 1
         if task_counter == opts.num_tasks:
