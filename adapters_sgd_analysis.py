@@ -22,7 +22,6 @@ from lora_xs.initialization_utils import find_and_initialize
 from prompts.singular_prompts import create_prompt_generator
 from data.datasets import GeneralSeq2SeqProfileDataset, create_preprocessor, convert_to_hf_dataset
 
-
 parser = argparse.ArgumentParser()
 parser.add_argument("--data_addr", default="./data_raw/user/LaMP_2/dev_questions_merged.json")
 parser.add_argument("--lmdb_addr", default="lmdb_data/LaMP-2-v1")
@@ -134,7 +133,7 @@ if __name__ == '__main__':
 
         from_, to_ = opts.from_user_id, opts.to_user_id if opts.to_user_id != -1 else len(user_data)
         for user_id in tqdm(range(from_, to_), leave=True, desc='Users', position=0):
-            logger = CSVLogger(output_dir, f'adapters_zoo_user_{user_id}')
+            logger = CSVLogger(output_dir, f'adapters_zoo_user_{user_id}_support_eval_with_greedy')
 
             train_data, test_data = split_data(user_data[user_id])
             
@@ -147,6 +146,28 @@ if __name__ == '__main__':
                 output_dir = output_dir,
                 do_eval = True,
                 per_device_eval_batch_size = opts.per_device_batch_size,
+                generation_num_beams=1,
+                predict_with_generate = True,
+                eval_accumulation_steps = 1,
+                generation_max_length = opts.max_generation_length,
+                disable_tqdm=True,
+                bf16=True
+            )
+            support_evaluator = Seq2SeqTrainer(
+                model = original_model,
+                args = training_args,
+                data_collator = collator,
+                eval_dataset = support_data,
+                tokenizer = tokenizer,
+                compute_metrics = compute_metrics,
+                # preprocess_logits_for_metrics=preprocess_logits_for_metrics
+            )
+            support_evaluator.remove_callback(PrinterCallback)
+            
+            eval_args = Seq2SeqTrainingArguments(
+                output_dir = output_dir,
+                do_eval = True,
+                per_device_eval_batch_size = opts.per_device_batch_size,
                 generation_num_beams = opts.generation_num_beams,
                 predict_with_generate = True,
                 eval_accumulation_steps = 1,
@@ -154,26 +175,24 @@ if __name__ == '__main__':
                 disable_tqdm=True,
                 bf16=True
             )
-            trainer = Seq2SeqTrainer(
+            query_evaluator = Seq2SeqTrainer(
                 model = original_model,
-                args = training_args,
+                args = eval_args,
                 data_collator = collator,
-                train_dataset=support_data,
                 eval_dataset = query_data,
                 tokenizer = tokenizer,
                 compute_metrics = compute_metrics
             )
-            trainer.remove_callback(PrinterCallback)
-            
-            with tqdm(total=len(adapters), desc='Processing Users') as pbar:
-                for adapter_id in tqdm(range(len(adapters)), leave=False, desc='Adapters', position=1):
-                    _ = original_model.load_state_dict(adapters[adapter_id], strict=False)
-                    
-                    support_results = trainer.evaluate(support_data, metric_key_prefix="support")
-                    query_results = trainer.evaluate(query_data, metric_key_prefix="query")
+            query_evaluator.remove_callback(PrinterCallback)
 
-                    logging_data = {'user_id': user_id, 'support_size': len(support_data), 'query_size': len(query_data),  **support_results, **query_results}
-                    logger.log(trainer=None, extra_data=logging_data)
+            for adapter_id in tqdm(range(len(adapters)), leave=False, desc='Adapters', position=1):
+                _ = original_model.load_state_dict(adapters[adapter_id], strict=False)
+                    
+                support_results = support_evaluator.evaluate(support_data, metric_key_prefix="support")
+                query_results = query_evaluator.evaluate(query_data, metric_key_prefix="query")
+
+                logging_data = {'user_id': user_id, 'support_size': len(support_data), 'query_size': len(query_data),  **support_results, **query_results}
+                logger.log(trainer=None, extra_data=logging_data)
     
     def sgd_adapt():
         from_, to_ = opts.from_user_id, opts.to_user_id if opts.to_user_id != -1 else len(user_data)
