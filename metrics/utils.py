@@ -22,3 +22,8 @@ def get_metrics(task, tokenizer):
     else:
         raise ValueError(f"Task {task} not supported")
     return compute_metrics, best_metric, labels, greater_is_better
+
+def preprocess_logits_for_metrics(logits, labels):
+    if isinstance(logits, tuple):
+        logits = logits[0]
+    return logits.argmax(dim=-1), labels
