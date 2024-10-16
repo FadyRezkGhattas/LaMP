@@ -20,7 +20,7 @@ def create_metric_f1_accuracy(tokenizer, all_labels):
         preds, labels = eval_preds
         if isinstance(preds, tuple):
             preds = preds[0]
-        preds = np.where(preds != -100, preds, tokenizer.pad_token_id)
+        # preds = np.where(preds != -100, preds, tokenizer.pad_token_id)
         decoded_preds = tokenizer.batch_decode(preds, skip_special_tokens=True)
         labels = np.where(labels != -100, labels, tokenizer.pad_token_id)
         decoded_labels = tokenizer.batch_decode(labels, skip_special_tokens=True)
