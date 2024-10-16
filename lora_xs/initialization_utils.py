@@ -64,7 +64,7 @@ def kaiming_uniform_init(matrix: torch.tensor):
     init.kaiming_uniform_(matrix, a=math.sqrt(5))
     return matrix
   
-def find_and_initialize(model, peft_config, adapter_name, reconstr_type, reconstruct_config, writer):
+def find_and_initialize(model, peft_config, adapter_name, reconstr_type, reconstruct_config, writer, skip_svd=False):
     """
     :param adapter_name: options: 'default'
     :param reconstr_type: options: 'svd'
@@ -92,11 +92,17 @@ def find_and_initialize(model, peft_config, adapter_name, reconstr_type, reconst
             _, target, target_name = _get_submodules(model, key)
 
             if reconstruction_mode == 'separated':
-                replacement_encoder_weight, replacement_decoder_weight = get_replacement_module(weight=target.weight.T,
-                                                                                                module_name=key,
-                                                                                                type=reconstr_type,
-                                                                                                writer=writer,
-                                                                                                reconstruct_config=reconstruct_config)
+                w = target.weight.T
+                if not skip_svd:
+                    replacement_encoder_weight, replacement_decoder_weight = get_replacement_module(weight=w,
+                                                                                                    module_name=key,
+                                                                                                    type=reconstr_type,
+                                                                                                    writer=writer,
+                                                                                                    reconstruct_config=reconstruct_config)
+                else:
+                    cfg = reconstruct_config[reconstr_type]
+                    replacement_encoder_weight = torch.rand([w.shape[0], cfg['rank']], dtype=w.dtype, device=w.device)
+                    replacement_decoder_weight = torch.rand([cfg['rank'], w.shape[0]], dtype=w.dtype, device=w.device)
 
                 if not isinstance(target, peft.tuners.lora.Linear):
                     raise NotImplementedError('Only initialization for peft.tuners.lora.Linear type is implemented.')
