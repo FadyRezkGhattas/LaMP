@@ -15,9 +15,9 @@ from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, GenerationConfig,
 
 from data.lmdb import LMDBDataset
 from metrics.utils import get_metrics
-from load_adapters import tensorize_loraxs_adapter
 from lora_xs.initialization_utils import find_and_initialize
 from prompts.singular_prompts import create_prompt_generator
+from load_adapters import tensorize_loraxs_adapter, load_adapter
 from data.datasets import GeneralSeq2SeqProfileDataset, create_preprocessor, convert_to_hf_dataset
 
 from diffusion.net import get_model
@@ -31,6 +31,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--exp_name", default="diff", help="used to log results in ./experiments/{task}/{dataset_name}_stage_4_{exp_name}")
 parser.add_argument("--data_addr", default="./data_raw/user/LaMP_2/dev_questions_merged.json")
 parser.add_argument("--model_name", default='./experiments/LaMP-2/finetune_all_train_user_profiles/checkpoint-32000')
+parser.add_argument("--svd_pth", default='./experiments/fixed_adapter')
 parser.add_argument("--use_bf16", default=True)
 parser.add_argument("--from_user_id", type=int, default=0, help="Train model starting from this user index.")
 parser.add_argument("--to_user_id", type=int, default=-1, help="Terminate training at this user index. If -1, train until end of available users.")
@@ -87,9 +88,11 @@ if __name__ == '__main__':
     reconstr_config['svd']['rank'] = rank
     find_and_initialize(
         original_model, peft_config_dict, adapter_name=adapter_name, reconstr_type='svd',
-        writer=None, reconstruct_config=reconstr_config
+        writer=None, reconstruct_config=reconstr_config, skip_svd=True
         )
     original_model.print_trainable_parameters()
+    original_model = load_adapter(original_model, opts.svd_pth)
+
     original_model = original_model.to('cuda')
     original_model.eval()
     for name, param in original_model.named_parameters():
@@ -196,7 +199,7 @@ if __name__ == '__main__':
         )
         acc_evaluator.remove_callback(PrinterCallback)
 
-        for adapter_id in tqdm(range(len(adapters)), leave=False, desc='Adapters', position=1):
+        for adapter_id in tqdm(range(len(adapters)), leave=False, desc='All Adapters', position=1):
             # insert adapter into model
             _ = original_model.load_state_dict(adapters[adapter_id], strict=False)
             results = loss_evaluator.evaluate(profile_data)
@@ -206,7 +209,7 @@ if __name__ == '__main__':
         # evaluate accuracy on these best k adapters
         best_15_adapters_idx = np.argsort(user_support_perf)[:15]
         best_15_adapters_accuracies = []
-        for adapter_id in tqdm(best_15_adapters_idx, leave=False, desc='Adapters', position=1):
+        for adapter_id in tqdm(best_15_adapters_idx, leave=False, desc='Top-15 Adapters', position=1):
             # insert adapter into model
             _ = original_model.load_state_dict(adapters[adapter_id], strict=False)
             
