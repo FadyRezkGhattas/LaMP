@@ -40,7 +40,7 @@ parser.add_argument("--rank", type=int, default=6)
 parser.add_argument("--per_device_batch_size", type = int, default = 64)
 parser.add_argument("--max_length", type = int, default = 512)
 parser.add_argument("--max_generation_length", type = int, default = 128)
-parser.add_argument("--generation_num_beams", type = int, default = 1)
+parser.add_argument("--generation_num_beams", type = int, default = 4)
 parser.add_argument("--cache_dir", default = "./cache")
 parser.add_argument('--num_tasks', type=int, default=-1, help='total number of tasks to evaluate model zoo on. If -1, all users are evaluated.')
 parser.add_argument('--early_stop', type=int, default=1e10, help='how many steps to wait for performance to not improve before skipping the rest of the model zoo')
@@ -182,7 +182,7 @@ if __name__ == '__main__':
             output_dir = output_dir,
             do_eval = True,
             per_device_eval_batch_size = opts.per_device_batch_size,
-            generation_num_beams = opts.generation_num_beams,
+            generation_num_beams = 1,
             predict_with_generate = True,
             eval_accumulation_steps = 1,
             generation_max_length = opts.max_generation_length,
