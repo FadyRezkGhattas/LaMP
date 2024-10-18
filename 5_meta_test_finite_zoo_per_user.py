@@ -239,7 +239,7 @@ if __name__ == '__main__':
                 'user_ids': user_id,
                 'label': txt_labels[-1],
                 'pred': txt_prediction,
-                'best_adapter_ids': best_adapter_id,
+                'best_adapter_ids': int(best_adapter_id),
                 'user_train_perfs': user_support_perf,
                 'query_losses': user_query_perf
             }, file, indent = 4)
