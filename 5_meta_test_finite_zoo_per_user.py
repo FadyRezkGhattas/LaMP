@@ -227,7 +227,7 @@ if __name__ == '__main__':
         tokenized_prediction = F.pad(outputs[0], (tokenizer.pad_token_id, opts.max_generation_length - len(outputs[0])))
 
         tokenized_predictions.append(tokenized_prediction)
-        best_adapter_ids.append(best_adapter_id)
+        best_adapter_ids.append(int(best_adapter_id))
         support_performance_all_users.append(user_support_perf)
 
         # log user final results
