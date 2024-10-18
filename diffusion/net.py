@@ -59,7 +59,8 @@ class AdditiveEmbedMLP(nn.Module):
                 name = 'layer{0:d}'.format(i),
                 module = torch.nn.Sequential(
                     torch.nn.Linear(dims[i], dims[i+1]), 
-                    nonlins[i]
+                    nonlins[i],
+                    nn.LayerNorm([dims[i+1]])
                 )
             )
         self.layers.add_module(
