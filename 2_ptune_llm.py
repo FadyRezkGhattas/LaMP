@@ -39,6 +39,7 @@ parser.add_argument("--num_train_epochs", type = int, default = 20)
 parser.add_argument("--lr_scheduler_type", default = "linear")
 parser.add_argument("--warmup_ratio", type = float, default = 0.05)
 parser.add_argument("--generation_num_beams", type = int, default = 4)
+parser.add_argument("--do_eval", type = bool, default = False)
 parser.add_argument("--gradient_accumulation_steps", type = int, default = 1)
 parser.add_argument("--cache_dir", default = "./cache")
 
@@ -119,8 +120,8 @@ if __name__ == "__main__":
             # trainer basics
             output_dir = opts.output_dir,
             do_train = True,
-            do_eval = True,
-            evaluation_strategy = "steps",
+            do_eval = opts.do_eval,
+            evaluation_strategy = "steps" if opts.do_eval else "no",
             eval_steps=5,
             # parallelization args
             per_device_train_batch_size = opts.per_device_batch_size,
