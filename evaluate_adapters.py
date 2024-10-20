@@ -54,7 +54,7 @@ if __name__ == '__main__':
     reconstr_config['svd']['rank'] = rank
     find_and_initialize(
         original_model, peft_config_dict, adapter_name=adapter_name, reconstr_type='svd',
-        writer=None, reconstruct_config=reconstr_config
+        writer=None, reconstruct_config=reconstr_config, skip_svd=True
         )
     original_model.print_trainable_parameters()
 
