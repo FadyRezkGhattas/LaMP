@@ -15,7 +15,12 @@ def create_metric_bleu_rouge_meteor(tokenizer):
         preds, labels = eval_preds
         if isinstance(preds, tuple):
             preds = preds[0]
-        preds = np.where(preds != -100, preds, tokenizer.pad_token_id)
+        # if inputs from transformers trainer, then this is necessary
+        # if inputs form my script, then preds is a list of tensors, it's unecessary and won't work
+        try:
+            preds = np.where(preds != -100, preds, tokenizer.pad_token_id)
+        except:
+            preds = preds
         decoded_preds = tokenizer.batch_decode(preds, skip_special_tokens=True)
         labels = np.where(labels != -100, labels, tokenizer.pad_token_id)
         decoded_labels = tokenizer.batch_decode(labels, skip_special_tokens=True)
