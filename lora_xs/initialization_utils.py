@@ -1,5 +1,6 @@
 import math
 import types
+from functools import partial
 
 import peft
 import torch
@@ -64,16 +65,11 @@ def kaiming_uniform_init(matrix: torch.tensor):
     init.kaiming_uniform_(matrix, a=math.sqrt(5))
     return matrix
   
-def find_and_initialize(model, peft_config, adapter_name, reconstr_type, reconstruct_config, writer, skip_svd=False):
+def set_forward_passes(model, lora_config, adapter_name):
     """
     :param adapter_name: options: 'default'
     :param reconstr_type: options: 'svd'
     """
-    half_init_dec = reconstruct_config['half_init_dec']
-    replacement_module_random_init = reconstruct_config['replacement_module_random_init']
-    reconstruction_mode = reconstruct_config['reconstr_mode']
-    lora_config = peft_config[adapter_name]
-    r_squared = reconstruct_config['r_squared']  # whether using r*r matrix between lora_A and lora_B or not
     loaded_in_8bit = getattr(model, "is_loaded_in_8bit", False)
     if loaded_in_8bit and not is_bnb_available():
         raise ImportError(
@@ -90,46 +86,81 @@ def find_and_initialize(model, peft_config, adapter_name, reconstr_type, reconst
             if not is_target_modules_in_base_model:
                 is_target_modules_in_base_model = True
             _, target, target_name = _get_submodules(model, key)
+            
+            target.forward = types.MethodType(forward_latent, target)
+            target.get_delta_weight = types.MethodType(get_delta_weight, target)
 
-            if reconstruction_mode == 'separated':
-                w = target.weight.T
-                if not skip_svd:
-                    replacement_encoder_weight, replacement_decoder_weight = get_replacement_module(weight=w,
+            latent_name = f'{adapter_name}_lora_latent_mapping'
+            setattr(target, latent_name, torch.nn.Linear(lora_config.r, lora_config.r, bias=False))
+            getattr(target, latent_name).to(getattr(target.lora_A, adapter_name).weight.device)
+
+            getattr(target.lora_A, adapter_name).weight.requires_grad = False  # only the r*r matrix will be tuned
+            getattr(target.lora_B, adapter_name).weight.requires_grad = False  # only the r*r matrix will be tuned
+
+    if not is_target_modules_in_base_model:
+        raise ValueError(
+            f"Target modules {lora_config.target_modules} not found in the base model. "
+            f"Please check the target modules and try again."
+        )
+
+def find_and_initialize(model, peft_config, adapter_name, reconstr_type, reconstruct_config, writer, skip_svd=False, num_adapters=1):
+    """
+    :param adapter_name: options: 'default'
+    :param reconstr_type: options: 'svd'
+    """
+    lora_config = peft_config[adapter_name]
+    loaded_in_8bit = getattr(model, "is_loaded_in_8bit", False)
+    if loaded_in_8bit and not is_bnb_available():
+        raise ImportError(
+            "To use Lora with 8-bit quantization, please install the `bitsandbytes` package. "
+            "You can install it with `pip install bitsandbytes`."
+        )
+    is_target_modules_in_base_model = False
+    key_list = [key for key, _ in model.named_modules()]
+    assert (not isinstance(lora_config.target_modules, str))
+    print("Iterating through model's specified modules to initialize A/B matrices.")
+    first_block=True
+    for key in tqdm(key_list):
+        target_module_found = any(key.endswith(target_key) for target_key in lora_config.target_modules)
+        if target_module_found:
+            if not is_target_modules_in_base_model:
+                is_target_modules_in_base_model = True
+            _, target, target_name = _get_submodules(model, key)
+            target.num_adapters = num_adapters
+            target.first_block = first_block
+            first_block=False
+
+            w = target.weight.T
+            if not skip_svd:
+                replacement_encoder_weight, replacement_decoder_weight = get_replacement_module(weight=w,
                                                                                                     module_name=key,
                                                                                                     type=reconstr_type,
                                                                                                     writer=writer,
                                                                                                     reconstruct_config=reconstruct_config)
-                else:
-                    cfg = reconstruct_config[reconstr_type]
-                    replacement_encoder_weight = torch.rand([w.shape[0], cfg['rank']], dtype=w.dtype, device=w.device)
-                    replacement_decoder_weight = torch.rand([cfg['rank'], w.shape[0]], dtype=w.dtype, device=w.device)
-
-                if not isinstance(target, peft.tuners.lora.Linear):
-                    raise NotImplementedError('Only initialization for peft.tuners.lora.Linear type is implemented.')
-                    # TODO implement for Linear8bitLt
-                else:
-                    if half_init_dec:
-                        kaiming_uniform_init_lower_half(replacement_decoder_weight)
-                    if replacement_module_random_init:
-                        kaiming_uniform_init(replacement_encoder_weight)
-                        kaiming_uniform_init(replacement_decoder_weight)
-                    replace_module_weights(target.lora_B.default, replacement_decoder_weight.T)
-                    if r_squared:
-                        target.forward = types.MethodType(forward_latent, target)
-                        target.get_delta_weight = types.MethodType(get_delta_weight, target)
-                        replace_module_weights(target.lora_A.default, replacement_encoder_weight.T)
-                        target.default_lora_latent_mapping = torch.nn.Linear(lora_config.r, lora_config.r, bias=False)
-                        init_module_weights(target.default_lora_latent_mapping, sigma=0.00001)
-                        target.default_lora_latent_mapping.to(target.lora_A.default.weight.device)
-
-                        target.lora_A.default.weight.requires_grad = False  # only the r*r matrix will be tuned
-                        target.lora_B.default.weight.requires_grad = False  # only the r*r matrix will be tuned
-
-                    else:
-                        init_module_weights(target.lora_A.default, sigma=0.00001)
-
             else:
-                raise NotImplementedError("The only supported mode is: separated.")
+                cfg = reconstruct_config[reconstr_type]
+                replacement_encoder_weight = torch.rand([w.shape[0], cfg['rank']], dtype=w.dtype, device=w.device)
+                replacement_decoder_weight = torch.rand([cfg['rank'], w.shape[0]], dtype=w.dtype, device=w.device)
+
+            replace_module_weights(target.lora_B.default, replacement_decoder_weight.T)
+            replace_module_weights(target.lora_A.default, replacement_encoder_weight.T)
+            target.lora_A.default.weight.requires_grad = False  # only the r*r matrix will be tuned
+            target.lora_B.default.weight.requires_grad = False  # only the r*r matrix will be tuned
+
+            target.forward = types.MethodType(forward_latent, target)
+            target.get_delta_weight = types.MethodType(get_delta_weight, target)
+
+            target.squared_matrix_name = 'default_lora_latent_mapping'
+            if num_adapters > 1:
+                squared_matrix = torch.rand(num_adapters, lora_config.r, lora_config.r)
+                setattr(target, target.squared_matrix_name, squared_matrix)
+                getattr(target, target.squared_matrix_name).weight.requires_grad = False # if multiple adapters, then this is inference
+            else:
+                squared_matrix = torch.nn.Linear(lora_config.r, lora_config.r, bias=False)
+                setattr(target, target.squared_matrix_name, squared_matrix)
+                init_module_weights(getattr(target, target.squared_matrix_name), sigma=0.00001)
+            
+            getattr(target, target.squared_matrix_name).to(target.lora_A.default.weight.device)
 
     if not is_target_modules_in_base_model:
         raise ValueError(

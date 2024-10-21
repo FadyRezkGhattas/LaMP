@@ -17,6 +17,8 @@ def get_delta_weight(self, adapter) -> torch.Tensor:
         adapter (str):
             The name of the adapter for which the delta weight should be computed.
     """
+    if self.num_adapters > 1:
+        raise ValueError('get_delta_weight only supports adapters with a single squared matrix initialized')
     device = self.lora_B[adapter].weight.device
     dtype = self.lora_B[adapter].weight.dtype
 
@@ -31,9 +33,10 @@ def get_delta_weight(self, adapter) -> torch.Tensor:
     if cast_to_fp32:
         weight_A = weight_A.float()
         weight_B = weight_B.float()
-
+    
+    latent_name = f'{adapter}_lora_latent_mapping_0'
     output_tensor = transpose(
-        weight_B @ self.default_lora_latent_mapping.weight @ weight_A,
+        weight_B @ getattr(self, latent_name).weight @ weight_A,
         self.fan_in_fan_out
     ) * self.scaling[adapter]
 
@@ -57,19 +60,30 @@ def forward_latent(self, x: torch.Tensor):
             self.unmerge()
         result = F.linear(x, transpose(self.weight, self.fan_in_fan_out), bias=self.bias)
     elif self.r[self.active_adapter[0]] > 0 and not self.merged:
+        # if we have multiple adapters loaded and this is the first block, then expand the batch size to repeat it num_adapter times
+        if self.num_adapters > 1 and self.first_block:
+            for i in range(self.num_adapters):
+                x = torch.cat([x,x], dim=0)
+
         result = F.linear(x, transpose(self.weight, self.fan_in_fan_out), bias=self.bias)
 
         x = x.to(self.lora_A[self.active_adapter[0]].weight.dtype)
 
         # adding latent_mapping in the forward loop
-        result += (
-            self.lora_B[self.active_adapter[0]](
-                self.default_lora_latent_mapping(
-                    self.lora_A[self.active_adapter[0]](self.lora_dropout[self.active_adapter[0]](x))
-                )
-            )
-            * self.scaling[self.active_adapter[0]]
-        )
+        latent_name = self.squared_matrix_name
+        out = self.lora_dropout[self.active_adapter[0]](x)
+        out = self.lora_A[self.active_adapter[0]](out)
+        if self.num_adapters > 1:
+            shape = out.shape[1:] # first dim is the expanded batch dim -> (batch_size, seq_length, dim)
+            out = out.view(self.num_adapters, -1, *shape[1:]) # (b, ..) -> (num_adapters, batch_size/num_adapters, seq_length, dim)
+            out = torch.bmm(x, torch.transpose(getattr(self, latent_name), 1, 2)) # -> (num_adapters, b/num_adapters, seq_length, latent_dim)
+            shape = out.shape[2:]
+            out = out.view(-1, *shape) # -> (batch_size, seq_length, latent_dim)
+        else:
+            out = getattr(self, latent_name)(out)
+        out = self.lora_B[self.active_adapter[0]](out) # -> (batch_size, seq_length, dim)
+        out = out * self.scaling[self.active_adapter[0]]
+        result += out
     else:
         result = F.linear(x, transpose(self.weight, self.fan_in_fan_out), bias=self.bias)
 
