@@ -52,7 +52,7 @@ parser.add_argument('--truncate_profile_size', type=int, default=-1, help='if > 
 # diffusion model and model zoo
 parser.add_argument('--use_diffusion', type=bool, default=False)
 parser.add_argument('--reverse_z_score', type=bool, default=True, help='If True, the lmdb dataset statistics are computed to reverse z-score of model')
-parser.add_argument('--lmdb_addr', type=str, default='lmdb_data/LaMP-2-v1')
+parser.add_argument('--lmdb_addr', type=str, default='lmdb_data/LaMP-2-final')
 parser.add_argument('--truncate_lmdb_dataset', type=int, default=-1, help='if > 0, then the lmdb dataset will be subsampled to have len=truncate_lmdb_dataset.')
 parser.add_argument('--diff_ckpt', type=str, default='./experiments/LaMP-2/diffusion/LaMP-2_normalize_data_3x_241007_204226/final_ckpt.pt', help='path to diffusion model for sampling model zoo')
 parser.add_argument('--diff_hdim', type=int, default=7680, help='hidden dim of diff net')
