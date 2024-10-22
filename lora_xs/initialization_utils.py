@@ -119,7 +119,6 @@ def find_and_initialize(model, peft_config, adapter_name, reconstr_type, reconst
     key_list = [key for key, _ in model.named_modules()]
     assert (not isinstance(lora_config.target_modules, str))
     print("Iterating through model's specified modules to initialize A/B matrices.")
-    first_block=True
     for key in tqdm(key_list):
         target_module_found = any(key.endswith(target_key) for target_key in lora_config.target_modules)
         if target_module_found:
@@ -127,8 +126,10 @@ def find_and_initialize(model, peft_config, adapter_name, reconstr_type, reconst
                 is_target_modules_in_base_model = True
             _, target, target_name = _get_submodules(model, key)
             target.num_adapters = num_adapters
-            target.first_block = first_block
-            first_block=False
+            if 'block.0' in key and 'encoder' in key:
+                target.first_block = True
+            else:
+                target.first_block = False
 
             w = target.weight.T
             if not skip_svd:
@@ -152,9 +153,9 @@ def find_and_initialize(model, peft_config, adapter_name, reconstr_type, reconst
 
             target.squared_matrix_name = 'default_lora_latent_mapping'
             if num_adapters > 1:
-                squared_matrix = torch.rand(num_adapters, lora_config.r, lora_config.r)
+                squared_matrix = torch.nn.parameter.Parameter(torch.rand(num_adapters, lora_config.r, lora_config.r))
                 setattr(target, target.squared_matrix_name, squared_matrix)
-                getattr(target, target.squared_matrix_name).weight.requires_grad = False # if multiple adapters, then this is inference
+                getattr(target, target.squared_matrix_name).requires_grad = False # if multiple adapters, then this is inference
             else:
                 squared_matrix = torch.nn.Linear(lora_config.r, lora_config.r, bias=False)
                 setattr(target, target.squared_matrix_name, squared_matrix)
