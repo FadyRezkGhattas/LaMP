@@ -1,5 +1,24 @@
 import torch
+import einops
 from safetensors import safe_open
+
+def concatenate_tensorized_adapters(adapters, num_adapters):
+    new_adapters = []
+    for i in range(0, len(adapters), num_adapters):
+        parallel_adapters = adapters[i:i+num_adapters]
+        common_keys = set(parallel_adapters[0].keys())
+        for item in parallel_adapters:
+            common_keys &= set(item.keys())
+
+        # Initialize an empty dictionary to store the concatenated tensors
+        result_dict = {}
+
+        # Iterate over the common keys and concatenate the tensors along dim=0
+        for key in common_keys:
+            tensor_list = [item[key].unsqueeze(0) for item in parallel_adapters]
+            result_dict[key] = torch.cat(tensor_list, dim=0)
+        new_adapters.append(result_dict)
+    return new_adapters
 
 def tensorize_loraxs_adapter(adapter_vector, rank=6, cuda=True, use_bf16=True, adapter_name='default'):
     keys = [
