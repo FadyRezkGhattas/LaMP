@@ -2,6 +2,7 @@ import warnings
 import torch
 import torch.nn.functional as F
 
+import einops
 
 def transpose(weight, fan_in_fan_out):
     return weight.T if fan_in_fan_out else weight
@@ -62,8 +63,7 @@ def forward_latent(self, x: torch.Tensor):
     elif self.r[self.active_adapter[0]] > 0 and not self.merged:
         # if we have multiple adapters loaded and this is the first block, then expand the batch size to repeat it num_adapter times
         if self.num_adapters > 1 and self.first_block:
-            for i in range(self.num_adapters):
-                x = torch.cat([x,x], dim=0)
+            x = einops.repeat(x, 'b s d -> (repeat b) s d', repeat=self.num_adapters)
 
         result = F.linear(x, transpose(self.weight, self.fan_in_fan_out), bias=self.bias)
 
@@ -75,8 +75,9 @@ def forward_latent(self, x: torch.Tensor):
         out = self.lora_A[self.active_adapter[0]](out)
         if self.num_adapters > 1:
             shape = out.shape[1:] # first dim is the expanded batch dim -> (batch_size, seq_length, dim)
-            out = out.view(self.num_adapters, -1, *shape[1:]) # (b, ..) -> (num_adapters, batch_size/num_adapters, seq_length, dim)
-            out = torch.bmm(x, torch.transpose(getattr(self, latent_name), 1, 2)) # -> (num_adapters, b/num_adapters, seq_length, latent_dim)
+            out = out.view(self.num_adapters, -1, *shape) # (b, ..) -> (num_adapters, batch_size/num_adapters, seq_length, dim)
+            w = torch.transpose(getattr(self, latent_name), 1, 2).unsqueeze(1)
+            out = torch.matmul(out, w) # -> (num_adapters, b/num_adapters, seq_length, latent_dim)
             shape = out.shape[2:]
             out = out.view(-1, *shape) # -> (batch_size, seq_length, latent_dim)
         else:
@@ -90,4 +91,3 @@ def forward_latent(self, x: torch.Tensor):
     result = result.to(previous_dtype)
 
     return result
-
