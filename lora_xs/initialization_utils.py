@@ -126,7 +126,7 @@ def find_and_initialize(model, peft_config, adapter_name, reconstr_type, reconst
                 is_target_modules_in_base_model = True
             _, target, target_name = _get_submodules(model, key)
             target.num_adapters = num_adapters
-            if 'block.0' in key and 'encoder' in key:
+            if 'block.0' in key and 'layer.0' in key:
                 target.first_block = True
             else:
                 target.first_block = False
