@@ -90,7 +90,7 @@ def tensorize_loraxs_adapter(adapter_vector, rank=6, cuda=True, use_bf16=True, a
         i += 1
     return adapter
 
-def load_adapter(model, path, adapter_name='default'):
+def load_adapter(model, path, adapter_name='default', num_adapters=1):
     tensors = {}
     with safe_open(f"{path}/adapter_model.safetensors",
                    framework="pt",
@@ -106,6 +106,12 @@ def load_adapter(model, path, adapter_name='default'):
                 "_lora_latent", f".{adapter_name}_lora_latent"): v
             for (k, v) in tensors.items() if "classifier.out_proj" not in k
         }
+    if num_adapters>1:
+        for key in renamed_state_dict:
+            if '_lora_latent' in key:
+                renamed_state_dict[key] = einops.repeat(renamed_state_dict[key].unsqueeze(0), 'b rank1 rank2 -> (repeat b) rank1 rank2', repeat=num_adapters)
+            else:
+                continue
 
     model.load_state_dict(renamed_state_dict, strict=False)
     return model
