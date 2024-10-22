@@ -18,7 +18,7 @@ from torch.utils.data import Subset
 from metrics.utils import get_metrics
 from lora_xs.initialization_utils import find_and_initialize
 from prompts.singular_prompts import create_prompt_generator
-from load_adapters import tensorize_loraxs_adapter, load_adapter
+from load_adapters import tensorize_loraxs_adapter, load_adapter, concatenate_tensorized_adapters
 from data.datasets import GeneralSeq2SeqProfileDataset, create_preprocessor, convert_to_hf_dataset
 
 from diffusion.net import get_model
