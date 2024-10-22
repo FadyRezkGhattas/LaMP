@@ -73,15 +73,7 @@ def forward_latent(self, x: torch.Tensor):
         latent_name = self.squared_matrix_name
         out = self.lora_dropout[self.active_adapter[0]](x)
         out = self.lora_A[self.active_adapter[0]](out)
-        if self.num_adapters > 1:
-            shape = out.shape[1:] # first dim is the expanded batch dim -> (batch_size, seq_length, dim)
-            out = out.view(self.num_adapters, -1, *shape) # (b, ..) -> (num_adapters, batch_size/num_adapters, seq_length, dim)
-            w = torch.transpose(getattr(self, latent_name), 1, 2).unsqueeze(1)
-            out = torch.matmul(out, w) # -> (num_adapters, b/num_adapters, seq_length, latent_dim)
-            shape = out.shape[2:]
-            out = out.view(-1, *shape) # -> (batch_size, seq_length, latent_dim)
-        else:
-            out = getattr(self, latent_name)(out)
+        out = getattr(self, latent_name)(out)
         out = self.lora_B[self.active_adapter[0]](out) # -> (batch_size, seq_length, dim)
         out = out * self.scaling[self.active_adapter[0]]
         result += out

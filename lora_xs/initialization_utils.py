@@ -11,7 +11,7 @@ from tqdm import tqdm
 
 from .latent_utils import get_delta_weight, forward_latent
 from .svd_utils import get_linear_rec_svd
-
+from .batched_latent_layer import BatchedLatent
 
 def get_replacement_module(weight, module_name, type, writer, reconstruct_config):
     cfg = reconstruct_config[type]
@@ -153,7 +153,7 @@ def find_and_initialize(model, peft_config, adapter_name, reconstr_type, reconst
 
             target.squared_matrix_name = 'default_lora_latent_mapping'
             if num_adapters > 1:
-                squared_matrix = torch.nn.parameter.Parameter(torch.rand(num_adapters, lora_config.r, lora_config.r))
+                squared_matrix = BatchedLatent(num_adapters, lora_config.r)
                 setattr(target, target.squared_matrix_name, squared_matrix)
                 getattr(target, target.squared_matrix_name).requires_grad = False # if multiple adapters, then this is inference
             else:
