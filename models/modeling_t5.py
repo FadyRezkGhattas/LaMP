@@ -1824,20 +1824,29 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
 
         lm_logits = self.lm_head(sequence_output)
         
+        if getattr(self, 'num_adapters', None) is None and lm_logits.shape[0] != labels.shape[0]:
+            raise ValueError('batch size of logits and labels does not match and num_adapters is not set.')
+        elif getattr(self, 'num_adapters', None) is None:
+            self.num_adapters = 1
+        
         loss = None
-        if labels is not None:
-            loss_fct = CrossEntropyLoss(ignore_index=-100)
-            # move labels to correct device to enable PP
-            labels = labels.to(lm_logits.device)
-            loss = loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))
-            # TODO(thom): Add z_loss https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L666
+        losses=[]
+        lm_logits_reshaped = lm_logits.reshape(self.num_adapters, -1, *lm_logits.shape[1:])
+        for lm_logits in lm_logits_reshaped:
+            if labels is not None:
+                loss_fct = CrossEntropyLoss(ignore_index=-100)
+                # move labels to correct device to enable PP
+                labels = labels.to(lm_logits.device)
+                loss = loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))
+            losses.append(loss)
+                # TODO(thom): Add z_loss https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L666
 
         if not return_dict:
             output = (lm_logits,) + decoder_outputs[1:] + encoder_outputs
             return ((loss,) + output) if loss is not None else output
 
         return Seq2SeqLMOutput(
-            loss=loss,
+            loss=losses,
             logits=lm_logits,
             past_key_values=decoder_outputs.past_key_values,
             decoder_hidden_states=decoder_outputs.hidden_states,
