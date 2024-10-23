@@ -245,7 +245,8 @@ if __name__ == '__main__':
                 'pred': txt_prediction,
                 'best_adapter_ids': int(best_adapter_id),
                 'user_train_perfs': user_support_perf,
-                'query_losses': user_query_perf
+                'query_losses': user_query_perf,
+                'best_15_adapters_accuracies': best_15_adapters_accuracies
             }, file, indent = 4)
         task_counter += 1
         if task_counter == opts.num_tasks:
