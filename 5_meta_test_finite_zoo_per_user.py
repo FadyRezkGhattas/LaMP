@@ -1,6 +1,7 @@
 import os
 import yaml
 import json
+import time
 import argparse
 from tqdm import tqdm
 from pathlib import Path
@@ -245,12 +246,14 @@ if __name__ == '__main__':
         txt_labels.append(query_data[0]['target'])
         query_data = convert_to_hf_dataset(query_data, cache_dir = opts.cache_dir).map(create_preprocessor(tokenizer = tokenizer, max_length = opts.max_length), batched=True)
 
+        t0 = time.time()
         # Get losses of all adapters
         user_support_perf = eval_adapters_losses_user_(profile_data=profile_data)
         # Get best 15 adapters indices and accuracies generated with greedy sampling
         best_15_adapters_idx, best_15_adapters_accuracies = eval_adapters_accuracies_user_(profile_data=profile_data, user_support_perf=user_support_perf)
         # Get beam searched prediction on best adapter of the shortlisted 15
         tokenized_prediction, best_adapter_id = get_best_adapter_prediction_(best_15_adapters_idx=best_15_adapters_idx, best_15_adapters_accuracies=best_15_adapters_accuracies, query_data=query_data)
+        t1 = time.time()
 
         tokenized_predictions.append(tokenized_prediction)
         best_adapter_ids.append(int(best_adapter_id))
@@ -267,7 +270,8 @@ if __name__ == '__main__':
                 'pred': txt_prediction,
                 'best_adapter_ids': int(best_adapter_id),
                 'user_train_perfs': user_support_perf,
-                'best_15_adapters_accuracies': best_15_adapters_accuracies
+                'best_15_adapters_accuracies': best_15_adapters_accuracies,
+                'adapters_eval_time': t1-t0
             }, file, indent = 4)
         task_counter += 1
         if task_counter == opts.num_tasks:
