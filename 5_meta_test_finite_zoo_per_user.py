@@ -4,6 +4,7 @@ import json
 import argparse
 from tqdm import tqdm
 from pathlib import Path
+from functools import partial
 
 import numpy as np
 import torch
@@ -58,6 +59,83 @@ parser.add_argument('--diff_ckpt', type=str, default='./experiments/LaMP-2/diffu
 parser.add_argument('--diff_hdim', type=int, default=7680, help='hidden dim of diff net')
 parser.add_argument('--diff_nhids', type=int, default=3, help='num of hidden layers in diff net')
 parser.add_argument('--diff_odim', type=int, default=2592, help='size of input and output dimensionality of the diffusion model')
+
+def eval_adapters_losses_user(opts, output_dir, original_model, collator, tokenizer, profile_data, adapters):
+    user_support_perf = [] # shape: num_adapters
+    
+    support_loss_args = Seq2SeqTrainingArguments(
+        output_dir = output_dir,
+        do_eval = True,
+        per_device_eval_batch_size = opts.per_device_batch_size,
+        eval_accumulation_steps = 1,
+        generation_max_length = opts.max_generation_length,
+        disable_tqdm=True,
+        bf16=opts.use_bf16
+    )
+    loss_evaluator = Seq2SeqTrainer(
+        model = original_model,
+        args = support_loss_args,
+        data_collator = collator,
+        eval_dataset = profile_data,
+        tokenizer = tokenizer
+    )
+    loss_evaluator.remove_callback(PrinterCallback)
+    
+    for adapter_id in tqdm(range(len(adapters)), leave=False, desc='All Adapters', position=1):
+        # insert adapter into model
+        _ = original_model.load_state_dict(adapters[adapter_id], strict=False)
+        results = loss_evaluator.evaluate(profile_data)
+        adapter_selection_metric_val = results['eval_loss']
+        user_support_perf.append(adapter_selection_metric_val)
+        if adapter_id == 30:
+            break
+    
+    return user_support_perf
+
+def eval_adapters_accuracies_user(opts, output_dir, original_model, collator, tokenizer, compute_metrics, adapters, user_support_perf, profile_data):
+    support_acc_args = Seq2SeqTrainingArguments(
+        output_dir = output_dir,
+        do_eval = True,
+        per_device_eval_batch_size = opts.per_device_batch_size,
+        generation_num_beams = 1,
+        predict_with_generate = True,
+        eval_accumulation_steps = 1,
+        generation_max_length = opts.max_generation_length,
+        disable_tqdm=True,
+        bf16=opts.use_bf16
+    )
+    acc_evaluator = Seq2SeqTrainer(
+        model = original_model,
+        args = support_acc_args,
+        data_collator = collator,
+        eval_dataset = profile_data,
+        tokenizer = tokenizer,
+        compute_metrics=compute_metrics
+    )
+    acc_evaluator.remove_callback(PrinterCallback)
+
+    # evaluate accuracy on these best k adapters
+    best_15_adapters_idx = np.argsort(user_support_perf)[:15]
+    best_15_adapters_accuracies = []
+    for adapter_id in tqdm(best_15_adapters_idx, leave=False, desc='Top-15 Adapters', position=1):
+        # insert adapter into model
+        _ = original_model.load_state_dict(adapters[adapter_id], strict=False)
+        
+        results = acc_evaluator.evaluate(profile_data)
+        adapter_selection_metric_val = results['eval_'+best_metric]
+        best_15_adapters_accuracies.append(adapter_selection_metric_val)
+    return best_15_adapters_idx, best_15_adapters_accuracies
+
+def get_best_adapter_prediction(opts, original_model, tokenizer, adapters, best_15_adapters_idx, best_15_adapters_accuracies, query_data):
+    # find best adapter using max support acc and load
+    best_adapter_id = best_15_adapters_idx[np.argmax(best_15_adapters_accuracies)]
+    _ = original_model.load_state_dict(adapters[best_adapter_id], strict=False)
+    # get query prediction
+    inputs = tokenizer(query_data[0]["source"], truncation=True, max_length=opts.max_length, return_tensors="pt").to('cuda')
+    outputs = original_model.generate(**inputs, num_beams=opts.generation_num_beams, generation_config=generation_config, max_new_tokens=opts.max_generation_length)
+    outputs = outputs.to('cpu')
+    tokenized_prediction = F.pad(outputs[0], (tokenizer.pad_token_id, opts.max_generation_length - len(outputs[0])))
+    return tokenized_prediction, best_adapter_id
 
 if __name__ == '__main__':
     opts = parser.parse_args()
@@ -148,14 +226,17 @@ if __name__ == '__main__':
     support_performance_all_users = [] # shape: number_users x num_adapters performance of adapters on user profiles
     best_train_metrics = [] # shape: number_users x1
     collator = DataCollatorForSeq2Seq(tokenizer = tokenizer, model = original_model)
+
+    eval_adapters_losses_user_ = partial(eval_adapters_losses_user, opts=opts, output_dir=output_dir, original_model=original_model, collator=collator, tokenizer=tokenizer, adapters=adapters)
+    eval_adapters_accuracies_user_ = partial(eval_adapters_accuracies_user, opts=opts, output_dir=output_dir, original_model=original_model, collator=collator, tokenizer=tokenizer, compute_metrics=compute_metrics, adapters=adapters)
+    get_best_adapter_prediction_ = partial(get_best_adapter_prediction, opts=opts, original_model=original_model, tokenizer=tokenizer, adapters=adapters)
+
     task_counter = 0
     from_, to_ = opts.from_user_id, opts.to_user_id if opts.to_user_id != -1 else len(user_data)
     for user_id in tqdm(range(from_, to_), leave=True, desc='Users', position=0):
         if Path(os.path.join(log_files_pth, f'{opts.exp_name}results_user_{user_id}.json')).is_file():
             continue
         user_ids.append(user_id)
-        user_support_perf = [] # shape: num_adapters
-        user_query_perf = [] # shape: num_adapters x1
 
         # load user profile and query
         profile_data = GeneralSeq2SeqProfileDataset(task, prompt_generator, val=False, user_id=user_id, data=user_data[user_id], truncate_profile_size=opts.truncate_profile_size)
@@ -164,71 +245,12 @@ if __name__ == '__main__':
         txt_labels.append(query_data[0]['target'])
         query_data = convert_to_hf_dataset(query_data, cache_dir = opts.cache_dir).map(create_preprocessor(tokenizer = tokenizer, max_length = opts.max_length), batched=True)
 
-        support_loss_args = Seq2SeqTrainingArguments(
-            output_dir = output_dir,
-            do_eval = True,
-            per_device_eval_batch_size = opts.per_device_batch_size,
-            eval_accumulation_steps = 1,
-            generation_max_length = opts.max_generation_length,
-            disable_tqdm=True,
-            bf16=opts.use_bf16
-        )
-        loss_evaluator = Seq2SeqTrainer(
-            model = original_model,
-            args = support_loss_args,
-            data_collator = collator,
-            eval_dataset = profile_data,
-            tokenizer = tokenizer
-        )
-        loss_evaluator.remove_callback(PrinterCallback)
-        
-        support_acc_args = Seq2SeqTrainingArguments(
-            output_dir = output_dir,
-            do_eval = True,
-            per_device_eval_batch_size = opts.per_device_batch_size,
-            generation_num_beams = 1,
-            predict_with_generate = True,
-            eval_accumulation_steps = 1,
-            generation_max_length = opts.max_generation_length,
-            disable_tqdm=True,
-            bf16=opts.use_bf16
-        )
-        acc_evaluator = Seq2SeqTrainer(
-            model = original_model,
-            args = support_acc_args,
-            data_collator = collator,
-            eval_dataset = profile_data,
-            tokenizer = tokenizer,
-            compute_metrics=compute_metrics
-        )
-        acc_evaluator.remove_callback(PrinterCallback)
-
-        for adapter_id in tqdm(range(len(adapters)), leave=False, desc='All Adapters', position=1):
-            # insert adapter into model
-            _ = original_model.load_state_dict(adapters[adapter_id], strict=False)
-            results = loss_evaluator.evaluate(profile_data)
-            adapter_selection_metric_val = results['eval_loss']
-            user_support_perf.append(adapter_selection_metric_val)
-        
-        # evaluate accuracy on these best k adapters
-        best_15_adapters_idx = np.argsort(user_support_perf)[:15]
-        best_15_adapters_accuracies = []
-        for adapter_id in tqdm(best_15_adapters_idx, leave=False, desc='Top-15 Adapters', position=1):
-            # insert adapter into model
-            _ = original_model.load_state_dict(adapters[adapter_id], strict=False)
-            
-            results = acc_evaluator.evaluate(profile_data)
-            adapter_selection_metric_val = results['eval_'+best_metric]
-            best_15_adapters_accuracies.append(adapter_selection_metric_val)
-
-        # find best adapter using max support acc and load
-        best_adapter_id = best_15_adapters_idx[np.argmax(best_15_adapters_accuracies)]
-        _ = original_model.load_state_dict(adapters[best_adapter_id], strict=False)
-        # get query prediction
-        inputs = tokenizer(query_data[0]["source"], truncation=True, max_length=opts.max_length, return_tensors="pt").to('cuda')
-        outputs = original_model.generate(**inputs, num_beams=opts.generation_num_beams, generation_config=generation_config, max_new_tokens=opts.max_generation_length)
-        outputs = outputs.to('cpu')
-        tokenized_prediction = F.pad(outputs[0], (tokenizer.pad_token_id, opts.max_generation_length - len(outputs[0])))
+        # Get losses of all adapters
+        user_support_perf = eval_adapters_losses_user_(profile_data=profile_data)
+        # Get best 15 adapters indices and accuracies generated with greedy sampling
+        best_15_adapters_idx, best_15_adapters_accuracies = eval_adapters_accuracies_user_(profile_data=profile_data, user_support_perf=user_support_perf)
+        # Get beam searched prediction on best adapter of the shortlisted 15
+        tokenized_prediction, best_adapter_id = get_best_adapter_prediction_(best_15_adapters_idx=best_15_adapters_idx, best_15_adapters_accuracies=best_15_adapters_accuracies, query_data=query_data)
 
         tokenized_predictions.append(tokenized_prediction)
         best_adapter_ids.append(int(best_adapter_id))
@@ -245,7 +267,6 @@ if __name__ == '__main__':
                 'pred': txt_prediction,
                 'best_adapter_ids': int(best_adapter_id),
                 'user_train_perfs': user_support_perf,
-                'query_losses': user_query_perf,
                 'best_15_adapters_accuracies': best_15_adapters_accuracies
             }, file, indent = 4)
         task_counter += 1
