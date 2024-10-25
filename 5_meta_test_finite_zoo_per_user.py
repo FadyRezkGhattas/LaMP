@@ -88,8 +88,6 @@ def eval_adapters_losses_user(opts, output_dir, original_model, collator, tokeni
         results = loss_evaluator.evaluate(profile_data)
         adapter_selection_metric_val = results['eval_loss']
         user_support_perf.append(adapter_selection_metric_val)
-        if adapter_id == 30:
-            break
     
     return user_support_perf
 
