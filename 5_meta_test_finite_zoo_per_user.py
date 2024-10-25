@@ -89,8 +89,6 @@ def eval_adapters_losses_user(opts, output_dir, original_model, collator, tokeni
         results = loss_evaluator.evaluate(profile_data)
         adapter_selection_metric_val = results['eval_loss']
         user_support_perf.append(adapter_selection_metric_val)
-        if adapter_id == 50:
-            break
     
     return user_support_perf
 
@@ -124,7 +122,7 @@ def eval_adapters_accuracies_user(opts, output_dir, original_model, collator, to
         
         results = acc_evaluator.evaluate(profile_data)
         adapter_selection_metric_val = results['eval_'+best_metric]
-        best_15_adapters_accuracies.append(adapter_selection_metric_val)
+        best_adapters_accuracies.append(adapter_selection_metric_val)
     return best_adapters_accuracies
 
 def get_adapter_prediction(opts, original_model, tokenizer, adapters, adapter_id, query_data):
