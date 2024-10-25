@@ -263,6 +263,7 @@ if __name__ == '__main__':
             # Get best 15 adapters indices
             best_15_adapters_cluster_idx = np.argsort(user_support_perf_cluster)[:15]
             best_15_adapters_idx = [cluster_adapters_idx[i] for i in best_15_adapters_cluster_idx]
+            user_support_perf = user_support_perf_cluster
         # get accuracies on best 15 adapters. predictions are generated with greedy sampling
         best_15_adapters_accuracies = eval_adapters_accuracies_user_(best_adapters_idx=best_15_adapters_idx, profile_data=profile_data)
         # Get beam searched prediction on best adapter of the shortlisted 15
