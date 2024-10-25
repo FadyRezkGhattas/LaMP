@@ -223,12 +223,12 @@ if __name__ == '__main__':
 
     if opts.lmdb_clusters is None:
         eval_adapters_losses_user_ = partial(eval_adapters_losses_user, opts=opts, output_dir=output_dir, original_model=original_model, collator=collator, tokenizer=tokenizer, adapters=adapters)
-        get_best_adapter_prediction_ = partial(get_adapter_prediction, opts=opts, original_model=original_model, tokenizer=tokenizer, adapters=adapters)
     else:
         with open(opts.lmdb_clusters) as f:
             lmdb_clusters = json.load(f)
         medoids_ids = lmdb_clusters['medoids']
         clusters_ids = lmdb_clusters['clusters']
+    get_best_adapter_prediction_ = partial(get_adapter_prediction, opts=opts, original_model=original_model, tokenizer=tokenizer, adapters=adapters)
     eval_adapters_accuracies_user_ = partial(eval_adapters_accuracies_user, opts=opts, output_dir=output_dir, original_model=original_model, collator=collator, tokenizer=tokenizer, compute_metrics=compute_metrics, adapters=adapters)
 
     task_counter = 0
