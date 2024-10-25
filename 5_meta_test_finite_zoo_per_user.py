@@ -55,6 +55,7 @@ parser.add_argument('--truncate_profile_size', type=int, default=-1, help='if > 
 parser.add_argument('--use_diffusion', type=bool, default=False)
 parser.add_argument('--reverse_z_score', type=bool, default=True, help='If True, the lmdb dataset statistics are computed to reverse z-score of model')
 parser.add_argument('--lmdb_addr', type=str, default='lmdb_data/LaMP-2-final')
+parser.add_argument('--lmdb_clusters', type=str, default='lmdb_data/LaMP-2-final/5_clusters.json', help='If provided, the medoids are used to chose a cluster whose adapters are evaluated for a user.')
 parser.add_argument('--truncate_lmdb_dataset', type=int, default=-1, help='if > 0, then the lmdb dataset will be subsampled to have len=truncate_lmdb_dataset.')
 parser.add_argument('--diff_ckpt', type=str, default='./experiments/LaMP-2/diffusion/LaMP-2_normalize_data_3x_241007_204226/final_ckpt.pt', help='path to diffusion model for sampling model zoo')
 parser.add_argument('--diff_hdim', type=int, default=7680, help='hidden dim of diff net')
@@ -88,6 +89,8 @@ def eval_adapters_losses_user(opts, output_dir, original_model, collator, tokeni
         results = loss_evaluator.evaluate(profile_data)
         adapter_selection_metric_val = results['eval_loss']
         user_support_perf.append(adapter_selection_metric_val)
+        if adapter_id == 50:
+            break
     
     return user_support_perf
 
@@ -220,9 +223,15 @@ if __name__ == '__main__':
     best_train_metrics = [] # shape: number_users x1
     collator = DataCollatorForSeq2Seq(tokenizer = tokenizer, model = original_model)
 
-    eval_adapters_losses_user_ = partial(eval_adapters_losses_user, opts=opts, output_dir=output_dir, original_model=original_model, collator=collator, tokenizer=tokenizer, adapters=adapters)
+    if opts.lmdb_clusters is None:
+        eval_adapters_losses_user_ = partial(eval_adapters_losses_user, opts=opts, output_dir=output_dir, original_model=original_model, collator=collator, tokenizer=tokenizer, adapters=adapters)
+        get_best_adapter_prediction_ = partial(get_adapter_prediction, opts=opts, original_model=original_model, tokenizer=tokenizer, adapters=adapters)
+    else:
+        with open(opts.lmdb_clusters) as f:
+            lmdb_clusters = json.load(f)
+        medoids_ids = lmdb_clusters['medoids']
+        clusters_ids = lmdb_clusters['clusters']
     eval_adapters_accuracies_user_ = partial(eval_adapters_accuracies_user, opts=opts, output_dir=output_dir, original_model=original_model, collator=collator, tokenizer=tokenizer, compute_metrics=compute_metrics, adapters=adapters)
-    get_best_adapter_prediction_ = partial(get_adapter_prediction, opts=opts, original_model=original_model, tokenizer=tokenizer, adapters=adapters)
 
     task_counter = 0
     from_, to_ = opts.from_user_id, opts.to_user_id if opts.to_user_id != -1 else len(user_data)
@@ -239,10 +248,24 @@ if __name__ == '__main__':
         query_data = convert_to_hf_dataset(query_data, cache_dir = opts.cache_dir).map(create_preprocessor(tokenizer = tokenizer, max_length = opts.max_length), batched=True)
 
         t0 = time.time()
-        # Get losses of all adapters
-        user_support_perf = eval_adapters_losses_user_(profile_data=profile_data)
-        # Get best 15 adapters indices and accuracies generated with greedy sampling
-        best_15_adapters_idx = np.argsort(user_support_perf)[:15]
+        if opts.lmdb_clusters is None:
+            # Get losses of all adapters
+            user_support_perf = eval_adapters_losses_user_(profile_data=profile_data)
+            # Get best 15 adapters indices
+            best_15_adapters_idx = np.argsort(user_support_perf)[:15]
+        else:
+            # Get losses for medoids
+            medoid_adapters = [adapters[i] for i in medoids_ids]
+            user_support_perf_medoids = eval_adapters_losses_user(opts, output_dir, original_model, collator, tokenizer, profile_data, medoid_adapters)
+            # get losses on the cluster with the best performing medoid
+            best_cluster_idx = np.argmin(user_support_perf_medoids)
+            cluster_adapters_idx = clusters_ids[best_cluster_idx]
+            cluster_adapters = [adapters[i] for i in cluster_adapters_idx]
+            user_support_perf_cluster = eval_adapters_losses_user(opts, output_dir, original_model, collator, tokenizer, profile_data, cluster_adapters)
+            # Get best 15 adapters indices
+            best_15_adapters_cluster_idx = np.argsort(user_support_perf_cluster)[:15]
+            best_15_adapters_idx = [cluster_adapters_idx[i] for i in best_15_adapters_cluster_idx]
+        # get accuracies on best 15 adapters. predictions are generated with greedy sampling
         best_15_adapters_accuracies = eval_adapters_accuracies_user_(best_adapters_idx=best_15_adapters_idx, profile_data=profile_data)
         # Get beam searched prediction on best adapter of the shortlisted 15
         best_adapter_id = best_15_adapters_idx[np.argmax(best_15_adapters_accuracies)]
