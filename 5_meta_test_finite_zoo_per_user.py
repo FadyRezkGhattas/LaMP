@@ -91,7 +91,7 @@ def eval_adapters_losses_user(opts, output_dir, original_model, collator, tokeni
     
     return user_support_perf
 
-def eval_adapters_accuracies_user(opts, output_dir, original_model, collator, tokenizer, compute_metrics, adapters, user_support_perf, profile_data):
+def eval_adapters_accuracies_user(opts, output_dir, original_model, collator, tokenizer, compute_metrics, adapters, best_adapters_idx, profile_data):
     support_acc_args = Seq2SeqTrainingArguments(
         output_dir = output_dir,
         do_eval = True,
@@ -114,21 +114,18 @@ def eval_adapters_accuracies_user(opts, output_dir, original_model, collator, to
     acc_evaluator.remove_callback(PrinterCallback)
 
     # evaluate accuracy on these best k adapters
-    best_15_adapters_idx = np.argsort(user_support_perf)[:15]
-    best_15_adapters_accuracies = []
-    for adapter_id in tqdm(best_15_adapters_idx, leave=False, desc='Top-15 Adapters', position=1):
+    best_adapters_accuracies = []
+    for adapter_id in tqdm(best_adapters_idx, leave=False, desc=f'Top Adapters', position=1):
         # insert adapter into model
         _ = original_model.load_state_dict(adapters[adapter_id], strict=False)
         
         results = acc_evaluator.evaluate(profile_data)
         adapter_selection_metric_val = results['eval_'+best_metric]
         best_15_adapters_accuracies.append(adapter_selection_metric_val)
-    return best_15_adapters_idx, best_15_adapters_accuracies
+    return best_adapters_accuracies
 
-def get_best_adapter_prediction(opts, original_model, tokenizer, adapters, best_15_adapters_idx, best_15_adapters_accuracies, query_data):
-    # find best adapter using max support acc and load
-    best_adapter_id = best_15_adapters_idx[np.argmax(best_15_adapters_accuracies)]
-    _ = original_model.load_state_dict(adapters[best_adapter_id], strict=False)
+def get_adapter_prediction(opts, original_model, tokenizer, adapters, adapter_id, query_data):
+    _ = original_model.load_state_dict(adapters[adapter_id], strict=False)
     # get query prediction
     inputs = tokenizer(query_data[0]["source"], truncation=True, max_length=opts.max_length, return_tensors="pt").to('cuda')
     outputs = original_model.generate(**inputs, num_beams=opts.generation_num_beams, generation_config=generation_config, max_new_tokens=opts.max_generation_length)
@@ -179,15 +176,12 @@ if __name__ == '__main__':
     # converting to bf16 after initializing lora-xs because sklearn svd does not support bf16 dtype
     if opts.use_bf16:
         original_model = original_model.bfloat16()
-    # original_model = torch.compile(original_model)
 
     # Load all users data
     print("Loading Dataset")
     task = opts.task
     compute_metrics, best_metric, txt_labels, greater_is_better = get_metrics(task, tokenizer)
     predict_with_generate = True
-    # if opts.selection_metric == 'loss':
-    #     compute_metrics, greater_is_better, best_metric, predict_with_generate = None, False, 'loss', False
 
     with open(opts.data_addr) as f:
         user_data = json.load(f)
@@ -228,7 +222,7 @@ if __name__ == '__main__':
 
     eval_adapters_losses_user_ = partial(eval_adapters_losses_user, opts=opts, output_dir=output_dir, original_model=original_model, collator=collator, tokenizer=tokenizer, adapters=adapters)
     eval_adapters_accuracies_user_ = partial(eval_adapters_accuracies_user, opts=opts, output_dir=output_dir, original_model=original_model, collator=collator, tokenizer=tokenizer, compute_metrics=compute_metrics, adapters=adapters)
-    get_best_adapter_prediction_ = partial(get_best_adapter_prediction, opts=opts, original_model=original_model, tokenizer=tokenizer, adapters=adapters)
+    get_best_adapter_prediction_ = partial(get_adapter_prediction, opts=opts, original_model=original_model, tokenizer=tokenizer, adapters=adapters)
 
     task_counter = 0
     from_, to_ = opts.from_user_id, opts.to_user_id if opts.to_user_id != -1 else len(user_data)
@@ -248,9 +242,11 @@ if __name__ == '__main__':
         # Get losses of all adapters
         user_support_perf = eval_adapters_losses_user_(profile_data=profile_data)
         # Get best 15 adapters indices and accuracies generated with greedy sampling
-        best_15_adapters_idx, best_15_adapters_accuracies = eval_adapters_accuracies_user_(profile_data=profile_data, user_support_perf=user_support_perf)
+        best_15_adapters_idx = np.argsort(user_support_perf)[:15]
+        best_15_adapters_accuracies = eval_adapters_accuracies_user_(best_adapters_idx=best_15_adapters_idx, profile_data=profile_data)
         # Get beam searched prediction on best adapter of the shortlisted 15
-        tokenized_prediction, best_adapter_id = get_best_adapter_prediction_(best_15_adapters_idx=best_15_adapters_idx, best_15_adapters_accuracies=best_15_adapters_accuracies, query_data=query_data)
+        best_adapter_id = best_15_adapters_idx[np.argmax(best_15_adapters_accuracies)]
+        tokenized_prediction = get_best_adapter_prediction_(adapter_id=best_adapter_id, query_data=query_data)
         t1 = time.time()
 
         tokenized_predictions.append(tokenized_prediction)
