@@ -132,7 +132,7 @@ def get_adapter_prediction(opts, original_model, tokenizer, adapters, adapter_id
     outputs = original_model.generate(**inputs, num_beams=opts.generation_num_beams, generation_config=generation_config, max_new_tokens=opts.max_generation_length)
     outputs = outputs.to('cpu')
     tokenized_prediction = F.pad(outputs[0], (tokenizer.pad_token_id, opts.max_generation_length - len(outputs[0])))
-    return tokenized_prediction, best_adapter_id
+    return tokenized_prediction
 
 if __name__ == '__main__':
     opts = parser.parse_args()
