@@ -2,9 +2,9 @@
 
 ## Environment Preparation
 TODO: flesh out
+- conda install nvidia/label/cuda-12.1.0::cuda-toolkit
 - Installing requirements.txt
 - Install deepspeed, and accelearte to use multi-gpu training if required
-
 ## Data
 
 ### LaMP Tasks 1-5 & 7
