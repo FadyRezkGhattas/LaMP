@@ -10,11 +10,14 @@ from functools import partial
 import numpy as np
 import torch
 import torch.nn.functional as F
+from torch.amp import autocast
+from torch.utils.data import DataLoader
 from peft import LoraConfig, get_peft_model
 from transformers.trainer_callback import PrinterCallback
 from transformers.data.data_collator import DataCollatorForSeq2Seq
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, GenerationConfig, Seq2SeqTrainer, Seq2SeqTrainingArguments
 
+from utils.utils import EvalLoopContainer
 from data.lmdb import LMDBDataset
 from torch.utils.data import Subset
 from metrics.utils import get_metrics
@@ -61,37 +64,32 @@ parser.add_argument('--diff_ckpt', type=str, default='./experiments/LaMP-2/diffu
 parser.add_argument('--diff_hdim', type=int, default=7680, help='hidden dim of diff net')
 parser.add_argument('--diff_nhids', type=int, default=3, help='num of hidden layers in diff net')
 parser.add_argument('--diff_odim', type=int, default=2592, help='size of input and output dimensionality of the diffusion model')
+parser.add_argument('--num_adapters', type=int, default=1, help='total number of adapters to do inference in parallel on')
 
+@torch.no_grad()
 def eval_adapters_losses_user(opts, output_dir, original_model, collator, tokenizer, profile_data, adapters):
+    original_model.eval()
+    original_model = original_model.to(dtype=torch.bfloat16, device='cuda')
     user_support_perf = [] # shape: num_adapters
-    
-    support_loss_args = Seq2SeqTrainingArguments(
-        output_dir = output_dir,
-        do_eval = True,
-        per_device_eval_batch_size = opts.per_device_batch_size,
-        eval_accumulation_steps = 1,
-        generation_max_length = opts.max_generation_length,
-        disable_tqdm=True,
-        bf16=opts.use_bf16
-    )
-    loss_evaluator = Seq2SeqTrainer(
-        model = original_model,
-        args = support_loss_args,
-        data_collator = collator,
-        eval_dataset = profile_data,
-        tokenizer = tokenizer
-    )
-    loss_evaluator.remove_callback(PrinterCallback)
+    loader = DataLoader(profile_data, opts.per_device_batch_size, shuffle=False, collate_fn=collator, drop_last=False, pin_memory=True)
     
     for adapter_id in tqdm(range(len(adapters)), leave=False, desc='All Adapters', position=1):
         # insert adapter into model
         _ = original_model.load_state_dict(adapters[adapter_id], strict=False)
-        results = loss_evaluator.evaluate(profile_data)
-        adapter_selection_metric_val = results['eval_loss']
-        user_support_perf.append(adapter_selection_metric_val)
+        batch_losses = EvalLoopContainer()
+        for batch in loader:
+            batch = batch.to('cuda')
+            batch_size = batch['input_ids'].shape[0]
+            with autocast(device_type='cuda', dtype=torch.bfloat16):
+                losses = original_model(**batch)[0]
+            batch_losses.add(losses.expand(batch_size, losses.shape[0]).T)
+        
+        batch_losses = batch_losses.get_arrays().mean(axis=1)
+        user_support_perf += batch_losses.tolist()
     
     return user_support_perf
 
+@torch.no_grad()
 def eval_adapters_accuracies_user(opts, output_dir, original_model, collator, tokenizer, compute_metrics, adapters, best_adapters_idx, profile_data):
     support_acc_args = Seq2SeqTrainingArguments(
         output_dir = output_dir,
@@ -125,7 +123,9 @@ def eval_adapters_accuracies_user(opts, output_dir, original_model, collator, to
         best_adapters_accuracies.append(adapter_selection_metric_val)
     return best_adapters_accuracies
 
+@torch.no_grad()
 def get_adapter_prediction(opts, original_model, tokenizer, adapters, adapter_id, query_data):
+    original_model.eval()
     _ = original_model.load_state_dict(adapters[adapter_id], strict=False)
     # get query prediction
     inputs = tokenizer(query_data[0]["source"], truncation=True, max_length=opts.max_length, return_tensors="pt").to('cuda')
@@ -136,13 +136,17 @@ def get_adapter_prediction(opts, original_model, tokenizer, adapters, adapter_id
 
 if __name__ == '__main__':
     opts = parser.parse_args()
+    num_adapters = opts.num_adapters
     dataset_name = opts.data_addr.split('/')[-1].split('.')[0]
     output_dir = os.path.join('./experiments', opts.task, f'{dataset_name}_stage_4_{opts.exp_name}')
     log_files_pth = os.path.join(output_dir, 'per_user')
 
     print("Loading Model")
-    original_model = AutoModelForSeq2SeqLM.from_pretrained(opts.model_name)
-    tokenizer = AutoTokenizer.from_pretrained("google/flan-t5-base", cache_dir="./cache")
+    # original_model = AutoModelForSeq2SeqLM.from_pretrained(opts.model_name)
+    from models.modeling_t5 import T5ForConditionalGeneration
+    original_model = T5ForConditionalGeneration.from_pretrained('./experiments/LaMP-2/finetune_all_train_user_profiles/checkpoint-32000')
+    original_model.num_adapters = num_adapters
+    tokenizer = AutoTokenizer.from_pretrained("google/flan-t5-base", cache_dir="./cache", padding=True)
     tokenizer.deprecation_warnings["Asking-to-pad-a-fast-tokenizer"] = True
     generation_config = GenerationConfig.from_pretrained(opts.model_name)
 
@@ -165,12 +169,10 @@ if __name__ == '__main__':
     reconstr_config['svd']['rank'] = rank
     find_and_initialize(
         original_model, peft_config_dict, adapter_name=adapter_name, reconstr_type='svd',
-        writer=None, reconstruct_config=reconstr_config, skip_svd=True
+        writer=None, reconstruct_config=reconstr_config, skip_svd=True, num_adapters=num_adapters
         )
     original_model.print_trainable_parameters()
-    original_model = load_adapter(original_model, opts.svd_pth)
-
-    original_model = original_model.to('cuda')
+    original_model = load_adapter(original_model, opts.svd_pth, num_adapters=num_adapters)
     original_model.eval()
     for name, param in original_model.named_parameters():
         param.contiguous()
@@ -210,6 +212,9 @@ if __name__ == '__main__':
     adapters = []
     for i in range(len(model_zoo)):
         adapters.append(tensorize_loraxs_adapter(model_zoo[i], use_bf16=opts.use_bf16))
+    if num_adapters > 1:
+        print("Concatenating multiple adapters")
+        adapters = concatenate_tensorized_adapters(adapters, num_adapters=num_adapters)
 
     prompt_generator = create_prompt_generator(tokenizer)
     
@@ -241,6 +246,7 @@ if __name__ == '__main__':
         # load user profile and query
         profile_data = GeneralSeq2SeqProfileDataset(task, prompt_generator, val=False, user_id=user_id, data=user_data[user_id], truncate_profile_size=opts.truncate_profile_size)
         profile_data = convert_to_hf_dataset(profile_data, cache_dir = opts.cache_dir).map(create_preprocessor(tokenizer = tokenizer, max_length = opts.max_length), batched=True)
+        profile_data = profile_data.remove_columns(['source', 'target', 'id'])
         query_data = GeneralSeq2SeqProfileDataset(task, prompt_generator, val=True, user_id=user_id, data=user_data[user_id])
         txt_labels.append(query_data[0]['target'])
         query_data = convert_to_hf_dataset(query_data, cache_dir = opts.cache_dir).map(create_preprocessor(tokenizer = tokenizer, max_length = opts.max_length), batched=True)
