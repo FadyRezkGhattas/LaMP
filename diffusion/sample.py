@@ -9,9 +9,9 @@ from .config import config
 sampling_config = config['sampling']
 
 
-def greedy_sample(dm, net):
+def greedy_sample(dm, net, rounds=10):
     params_vectors = []
-    for round in range(sampling_config['nrounds']):
+    for round in range(rounds):
         params_vectors_ = greedy_sample_round(dm, net)
         params_vectors += params_vectors_
     return params_vectors
