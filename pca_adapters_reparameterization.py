@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 from sklearn.decomposition import PCA
 
 from utils.utils import mkdir
-from utils.lmdb_utils import prepare
+from data.lmdb_utils import prepare
 from data.lmdb import LMDBDataset
 
 parser = ArgumentParser()
