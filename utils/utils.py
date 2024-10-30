@@ -3,6 +3,14 @@ from transformers import Trainer
 import csv
 import os
 
+def mkdir(paths):
+
+    if not isinstance(paths, (list, tuple)):
+        paths = [paths]
+
+    for path in paths:
+        if not os.path.isdir(path):
+            os.makedirs(path)
 
 def opts_to_exp_name(opts):
     return f"r_{opts.rank}_alpha_{opts.lora_alpha}_lr_{opts.learning_rate}_epochs_{opts.num_train_epochs}_sch_{opts.lr_scheduler_type}"
