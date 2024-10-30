@@ -14,7 +14,7 @@ from diffusion.gaussian_diffusion import GaussianDiffusion
 parser = ArgumentParser('Inputs: a diffusion model and dataset used to train the diffusion. Sample the diffusion, do necessary transformations and save a model zoo from diffusion prior.')
 parser.add_argument('--sampling_routine', choices=['standard', 'pcaed'], help='If standard, then sample diffusion model, reverse z score using lmdb_addr data if necessary and save diffusion samples in out_dir.\
                     If pcaed, then sample diffusion model. lmdb_addr is assumed to be pcaed data used to train the diff model. The folder must contain pca model, and pre-PCA data statistics.')
-parser.add_argument('--lmdb_addr', type=str, default='lmdb_data/LaMP-2-final')
+parser.add_argument('--lmdb_addr', type=str, default='lmdb_data/LaMP-2-final-pca')
 parser.add_argument('--reverse_z_score', type=bool, default=False, help='If True, the lmdb dataset statistics are computed to reverse z-score of model')
 parser.add_argument('--diff_ckpt', type=str, default='./experiments/LaMP-2/diffusion/LaMP-2_normalize_data_3x_241007_204226/final_ckpt.pt', help='path to diffusion model for sampling model zoo')
 parser.add_argument('--diff_hdim', type=int, default=7680, help='hidden dim of diff net')
