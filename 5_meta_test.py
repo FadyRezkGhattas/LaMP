@@ -18,9 +18,9 @@ from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, GenerationConfig,
 from data.lmdb import LMDBDataset
 from torch.utils.data import Subset
 from metrics.utils import get_metrics
-from lora_xs.initialization_utils import find_and_initialize
+from lora_xs.make_peft_model import make_peft_model
 from prompts.singular_prompts import create_prompt_generator
-from load_adapters import tensorize_loraxs_adapter, load_adapter
+from load_adapters import tensorize_loraxs_adapter
 from data.datasets import GeneralSeq2SeqProfileDataset, create_preprocessor, convert_to_hf_dataset
 
 from diffusion.net import get_model
@@ -40,6 +40,7 @@ parser.add_argument("--from_user_id", type=int, default=0, help="Train model sta
 parser.add_argument("--to_user_id", type=int, default=-1, help="Terminate training at this user index. If -1, train until end of available users.")
 parser.add_argument("--task", default='LaMP-2')
 parser.add_argument("--rank", type=int, default=6)
+parser.add_argument("--lora_alpha", type=int, default=16)
 parser.add_argument("--per_device_batch_size", type = int, default = 64)
 parser.add_argument("--max_length", type = int, default = 512)
 parser.add_argument("--max_generation_length", type = int, default = 128)
@@ -147,28 +148,7 @@ if __name__ == '__main__':
     generation_config = GenerationConfig.from_pretrained(opts.model_name)
 
     # prepare model for PEFTing
-    print("Configuring LoRA-XS")
-    rank = 6
-    lora_alpha = 16
-    config = LoraConfig(
-        r=rank,
-        target_modules=["q", "v"],
-        task_type="SEQ_2_SEQ_LM", # assuming a decoder-only model in this example
-        lora_alpha=lora_alpha,
-        use_rslora=True
-        )
-    original_model = get_peft_model(original_model, config)
-    with open("./lora_xs/reconstruct_config.yaml", 'r') as stream:
-        reconstr_config = yaml.load(stream, Loader=yaml.FullLoader)
-    adapter_name = "default"  # assuming a single LoRA adapter per module should be transformed to LoRA-XS
-    peft_config_dict = {adapter_name: config}
-    reconstr_config['svd']['rank'] = rank
-    find_and_initialize(
-        original_model, peft_config_dict, adapter_name=adapter_name, reconstr_type='svd',
-        writer=None, reconstruct_config=reconstr_config, skip_svd=True
-        )
-    original_model.print_trainable_parameters()
-    original_model = load_adapter(original_model, opts.svd_pth)
+    original_model = make_peft_model(opts, original_model)
 
     original_model = original_model.to('cuda')
     original_model.eval()
