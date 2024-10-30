@@ -15,11 +15,11 @@ from data.lmdb import LMDBDataset
 
 parser = ArgumentParser()
 parser.add_argument('--data', type=str, default='./lmdb_data/LaMP-2-final')
-parser.add_argument('--experiment', type=str, default='explained_var', choices=['explained_var', 'dim_red'], help="explained_var creates explained variance plot is saved in data path. \
+parser.add_argument('--experiment', type=str, default='dim_red', choices=['explained_var', 'dim_red'], help="explained_var creates explained variance plot is saved in data path. \
                     dim_red uses n_components to create a dimensionality reduced dataset and is saved as data name + pca postfix.\
                     For example, ./lmdb_data/LaMP-2-final -> lmdb_data/LaMP-2-final-pca.")
-parser.add_argument('--n_components', type=int, default=1568)
-parser.add_argument('--out', type=str, default='./lmdb_data/LaMP-2-final-pca')
+parser.add_argument('--n_components', type=int, default=512)
+parser.add_argument('--out', type=str, default='./lmdb_data/LaMP-2-final-pca-512')
 parser.add_argument('--n_worker', type=int, default=64)
 args = parser.parse_args()
 
