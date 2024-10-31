@@ -36,6 +36,7 @@ if args.experiment == 'find_num_clusters':
     mkdir(logging_dir)
     fits = []
     score = []
+    cluster_sizes = []
     K = range(args.from_num_clusters, args.to_num_clusters)
 
     for k in tqdm(K, desc='Num of clusters'):
@@ -48,6 +49,9 @@ if args.experiment == 'find_num_clusters':
         # Append the silhouette score to scores
         score.append(silhouette_score(X_train_norm, model.labels_, metric='euclidean'))
 
+        # Append the cluster sizes to log later
+        cluster_sizes.append(np.unique(model.labels_, return_counts=True)[1])
+
     plt.grid()
     plt.plot(K, score, marker='o')
     plt.xlabel('Number of Clusters')
@@ -55,7 +59,7 @@ if args.experiment == 'find_num_clusters':
     plt.title('n_components vs. Explained Variance Ratio')
     plt.savefig(os.path.join(logging_dir, 'clusters_silhouette_score.jpg'))
 
-    df = pd.DataFrame({'k':K,'score':score})
+    df = pd.DataFrame({'k':K,'score':score, 'cluster_sizes':cluster_sizes})
     df.to_csv(os.path.join(logging_dir, 'cluster_scores.csv'), index = False)
 elif args.experiment == 'cluster':
     model = KMeans(n_clusters  = args.num_clusters, random_state=0).fit(X_train_norm)
