@@ -1,5 +1,6 @@
 import os
 import json
+from tqdm import tqdm
 from argparse import ArgumentParser
 
 import numpy as np
@@ -36,7 +37,7 @@ if args.experiment == 'find_num_clusters':
     score = []
     K = range(args.from_num_clusters, args.to_num_clusters)
 
-    for k in K:
+    for k in tqdm(K, desc='Num of clusters'):
         # train the model for current value of k on training data
         model = KMeans(n_clusters = k, random_state=0).fit(X_train_norm)
         
