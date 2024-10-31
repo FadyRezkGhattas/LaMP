@@ -73,7 +73,7 @@ elif args.experiment == 'cluster':
         medoid_id = GetMedoid_id(adapters_in_cluster, cluster_centers[cluster_id])
         clusters_medoids.append(int(adapter_indices_in_cluster[medoid_id]))
         clusters.append(adapter_indices_in_cluster.tolist())
-    with open(f'{args.num_clusters}_clusters.json', 'w') as file:
+    with open(os.path.join(args.data, f'{args.num_clusters}_clusters.json'), 'w') as file:
         json.dump({
             'medoids': clusters_medoids,
             'clusters': clusters
