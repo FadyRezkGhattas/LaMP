@@ -10,8 +10,8 @@ from sklearn import preprocessing
 from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_score
 
+from utils.utils import mkdir
 from data.lmdb import LMDBDataset
-
 
 parser = ArgumentParser(description='Clustering lmdb datasets experimets. (1) --experiment=find_num_clusters runs kmeans clustering on the lmdb dataset and saves number of clusters vs silhouette scores plots and data in a subdirectory called clustering_analysis in lmdb data dir.\
                         (2) --experiment=cluster clusters the data into N components and saves a json files called {num_clusters}_clusters.json file in lmdb data dir. The file contains adapter IDs of medoids and IDs of adapters in each cluster.')
@@ -33,6 +33,7 @@ X_train_norm = preprocessing.normalize(adapters)
 
 if args.experiment == 'find_num_clusters':
     logging_dir = os.path.join(args.data, 'clustering_analysis')
+    mkdir(logging_dir)
     fits = []
     score = []
     K = range(args.from_num_clusters, args.to_num_clusters)
