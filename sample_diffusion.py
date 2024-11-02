@@ -24,6 +24,7 @@ parser.add_argument('--diff_nhids', type=int, default=3, help='num of hidden lay
 parser.add_argument('--diff_odim', type=int, default=1568, help='size of input and output dimensionality of the diffusion model')
 parser.add_argument('--diff_sampling_rounds', type=int, default=20, help='Number of rounds to sample diffusion model. Each round, samples 500 datapoints.')
 parser.add_argument('--n_worker', type=int, default=8)
+parser.add_argument('--out_addr_postfix', type=str, default='')
 opts = parser.parse_args()
 
 # load diffusion model
@@ -55,7 +56,7 @@ if opts.sampling_routine == 'pcaed':
     # cast zoo back as tensors and
     model_zoo = [torch.from_numpy(x) for x in model_zoo]
 
-out_addr = opts.lmdb_addr+'-diff-samples'
+out_addr = opts.lmdb_addr+opts.out_addr_postfix+'-diff-samples'
 mkdir(out_addr)
 with lmdb.open(out_addr, map_size=1024**4, readahead=False) as env:
     prepare(env, model_zoo, opts.n_worker)
