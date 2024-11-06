@@ -20,7 +20,7 @@ from data.lmdb import LMDBDataset
 from metrics.utils import get_metrics
 from lora_xs.make_peft_model import make_peft_model
 from prompts.singular_prompts import create_prompt_generator
-from load_adapters import tensorize_loraxs_adapter
+from load_adapters import tensorize_loraxs_adapter, ADAPTERS_KEYS
 from data.datasets import GeneralSeq2SeqProfileDataset, create_preprocessor, convert_to_hf_dataset
 
 from diffusion.net import get_model
@@ -60,10 +60,12 @@ parser.add_argument('--diff_odim', type=int, default=2592, help='size of input a
 def collect_grads(model):
     """Collect gradients from all parameters"""
     grads = []
-    for param in model.parameters():
-        if param.requires_grad:
-            grads.append(param.grad)
-    return torch.stack(grads, dim=0)
+    vector_params = torch.tensor([]).to()
+    for name, param in model.named_parameters():
+        if name in ADAPTERS_KEYS:
+            grads.append(torch.nn.utils.parameters_to_vector(param))
+            vector_params = torch.concat((vector_params.to(grads.device), grads), dim=0)
+    return vector_params
 
 def get_loss_grads(model, adapter, batch, mean, std):
     model.train()
