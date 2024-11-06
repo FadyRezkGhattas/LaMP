@@ -199,7 +199,16 @@ if __name__ == '__main__':
 
         t0 = time.time()
         # Get losses of all adapters
+        print("Posterior Sampling Start")
         adapters, user_support_perf = eval_adapters_losses_user(opts, original_model, collator, profile_data, gaussian_diff, diffusion_net, get_loss_grads_)
+        # Tensorizing posterior samples
+        print("Tensorizing Posterior Samples")
+        if opts.reverse_z_score:
+            device = adapters[0].device
+            model_zoo = [mean.to(device) + (adapter*std.to(device)) for adapter in adapters]
+        adapters = []
+        for i in range(len(adapters)):
+            adapters.append(tensorize_loraxs_adapter(model_zoo[i], use_bf16=opts.use_bf16))
         # Get best 15 adapters indices
         best_15_adapters_idx = np.argsort(user_support_perf)[:15]
         # get accuracies on best 15 adapters. predictions are generated with greedy sampling
