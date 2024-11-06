@@ -11,6 +11,7 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 from torch.amp import autocast
+from torch.amp.grad_scaler import GradScaler
 from torch.utils.data import DataLoader
 from transformers.trainer_callback import PrinterCallback
 from transformers.data.data_collator import DataCollatorForSeq2Seq
@@ -52,36 +53,50 @@ parser.add_argument('--truncate_profile_size', type=int, default=64, help='if > 
 parser.add_argument('--reverse_z_score', type=bool, default=True, help='If True, the lmdb dataset statistics are computed to reverse z-score of model')
 parser.add_argument('--lmdb_addr', type=str, default='lmdb_data/LaMP-2-final')
 parser.add_argument('--truncate_lmdb_dataset', type=int, default=-1, help='if > 0, then the lmdb dataset will be subsampled to have len=truncate_lmdb_dataset.')
-parser.add_argument('--diff_ckpt', type=str, default='./experiments/LaMP-2/diffusion/LaMP-2_normalize_data_3x_241007_204226/final_ckpt.pt', help='path to diffusion model for sampling model zoo')
+parser.add_argument('--diff_ckpt', type=str, default='/home/CORP/fady.rezk/Desktop/LaMP/experiments/diffusion_ckpts/LaMP-2_normalize_data_3x_241007_204226/final_ckpt.pt', help='path to diffusion model for sampling model zoo')
 parser.add_argument('--diff_hdim', type=int, default=7680, help='hidden dim of diff net')
 parser.add_argument('--diff_nhids', type=int, default=3, help='num of hidden layers in diff net')
 parser.add_argument('--diff_odim', type=int, default=2592, help='size of input and output dimensionality of the diffusion model')
+parser.add_argument('--cand_size', type=int, default=50, help='size of input and output dimensionality of the diffusion model')
+parser.add_argument('--timestep_dps', type=int, default=20, help='size of input and output dimensionality of the diffusion model')
 
 def collect_grads(model):
     """Collect gradients from all parameters"""
-    grads = []
     vector_params = torch.tensor([]).to()
     for name, param in model.named_parameters():
         if name in ADAPTERS_KEYS:
-            grads.append(torch.nn.utils.parameters_to_vector(param))
+            grads = torch.nn.utils.parameters_to_vector(param)
             vector_params = torch.concat((vector_params.to(grads.device), grads), dim=0)
     return vector_params
 
 def get_loss_grads(model, adapter, batch, mean, std):
+    scaler = GradScaler()
     model.train()
     device = adapter.device
     adapter = mean.to(device) + (adapter*std.to(device))
-    adapter = tensorize_loraxs_adapter(adapter)
+    adapter = tensorize_loraxs_adapter(adapter, use_bf16=False)
+    # set adapters to requires_grad
+    for name, param in adapter.items():
+        param.requires_grad = True
+    
+    # merge adapter to model and set grads to None
     _ = original_model.load_state_dict(adapter, strict=False)
+    for name, param in model.named_parameters():
+        if param.requires_grad:
+            param.grad = None
+    
+    # get loss and grads
     with autocast(device_type='cuda', dtype=torch.bfloat16):
+        batch = batch.to('cuda')
         loss = model(**batch)[0]
-    loss.backward()
+    scaler.scale(loss).backward()
     grads = collect_grads(model)
     model.eval()
     return loss.item(), grads
 
 def eval_adapters_losses_user(opts, original_model, collator, profile_data, gaussian_diff, diffusion_net, get_loss_grads_):
     original_model = original_model.to(dtype=torch.bfloat16, device='cuda')
+    profile_data = profile_data.remove_columns(['source', 'target', 'id'])
     loader = DataLoader(profile_data, opts.per_device_batch_size, shuffle=False, collate_fn=collator, drop_last=False, pin_memory=True)
     i, batch = next(enumerate(loader))
     adapters, losses = posterior_sample(gaussian_diff, diffusion_net, original_model, get_loss_grads_, batch, opts.cand_size, opts.timestep_dps)
