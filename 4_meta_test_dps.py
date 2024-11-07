@@ -57,7 +57,7 @@ parser.add_argument('--diff_ckpt', type=str, default='/home/CORP/fady.rezk/Deskt
 parser.add_argument('--diff_hdim', type=int, default=7680, help='hidden dim of diff net')
 parser.add_argument('--diff_nhids', type=int, default=3, help='num of hidden layers in diff net')
 parser.add_argument('--diff_odim', type=int, default=2592, help='size of input and output dimensionality of the diffusion model')
-parser.add_argument('--cand_size', type=int, default=50, help='size of input and output dimensionality of the diffusion model')
+parser.add_argument('--cand_size', type=int, default=5, help='size of input and output dimensionality of the diffusion model')
 parser.add_argument('--timestep_dps', type=int, default=20, help='size of input and output dimensionality of the diffusion model')
 
 def collect_grads(model):
@@ -102,7 +102,7 @@ def eval_adapters_losses_user(opts, original_model, collator, profile_data, gaus
     adapters, losses = posterior_sample(gaussian_diff, diffusion_net, original_model, get_loss_grads_, batch, opts.cand_size, opts.timestep_dps)
     return adapters, losses
 
-def eval_adapters_accuracies_user(opts, output_dir, original_model, collator, tokenizer, compute_metrics, adapters, best_adapters_idx, profile_data):
+def eval_adapters_accuracies_user(opts, output_dir, original_model, collator, tokenizer, compute_metrics, adapters, profile_data):
     support_acc_args = Seq2SeqTrainingArguments(
         output_dir = output_dir,
         do_eval = True,
@@ -126,7 +126,7 @@ def eval_adapters_accuracies_user(opts, output_dir, original_model, collator, to
 
     # evaluate accuracy on these best k adapters
     best_adapters_accuracies = []
-    for adapter_id in tqdm(best_adapters_idx, leave=False, desc=f'Top Adapters', position=1):
+    for adapter_id in tqdm(range(len(adapters)), leave=False, desc=f'Top Adapters', position=1):
         # insert adapter into model
         _ = original_model.load_state_dict(adapters[adapter_id], strict=False)
         
@@ -222,19 +222,16 @@ if __name__ == '__main__':
             device = adapters[0].device
             model_zoo = [mean.to(device) + (adapter*std.to(device)) for adapter in adapters]
         adapters = []
-        for i in range(len(adapters)):
+        for i in range(len(model_zoo)):
             adapters.append(tensorize_loraxs_adapter(model_zoo[i], use_bf16=opts.use_bf16))
-        # Get best 15 adapters indices
-        best_15_adapters_idx = np.argsort(user_support_perf)[:15]
-        # get accuracies on best 15 adapters. predictions are generated with greedy sampling
-        best_15_adapters_accuracies = eval_adapters_accuracies_user()
-        # Get beam searched prediction on best adapter of the shortlisted 15
-        best_adapter_id = best_15_adapters_idx[np.argmax(best_15_adapters_accuracies)]
-        tokenized_prediction = get_adapter_prediction()
+        # Rank adapters using accuracies
+        adapters_accuracies = eval_adapters_accuracies_user(opts, output_dir, original_model, collator, tokenizer, compute_metrics, adapters, profile_data)
+        # Best adapter prediction
+        best_adapter_id = np.argmax(adapters_accuracies)
+        tokenized_prediction = get_adapter_prediction(opts, original_model, tokenizer, adapters, best_adapter_id, query_data)
         t1 = time.time()
 
         tokenized_predictions.append(tokenized_prediction)
-        best_adapter_ids.append(int(best_adapter_id))
         support_performance_all_users.append(user_support_perf)
 
         # log user final results
@@ -246,9 +243,8 @@ if __name__ == '__main__':
                 'user_ids': user_id,
                 'label': txt_labels[-1],
                 'pred': txt_prediction,
-                'best_adapter_ids': int(best_adapter_id),
                 'user_train_perfs': user_support_perf,
-                'best_15_adapters_accuracies': best_15_adapters_accuracies,
+                'adapters_accuracies': adapters_accuracies,
                 'adapters_eval_time': t1-t0
             }, file, indent = 4)
     txt_predictions = tokenizer.batch_decode(tokenized_predictions, skip_special_tokens=True)

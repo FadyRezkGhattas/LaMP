@@ -104,7 +104,7 @@ def posterior_sample(dm, net, model, get_loss_grads, support_batch, cand_size, t
     ).to(device)  # x_{tau_S=T}; (#cands x dim(head))
     B = noise.shape[0]
     adapters = noise  # x_{tau_S=T}
-    for i in tqdm(reversed(range(1,S+1)), total=S):  # i=S,S-1,...,1
+    for i in tqdm(reversed(range(1,S+1)), total=S, desc='Timesteps', position=0, leave=True, ncols=80):  # i=S,S-1,...,1
         
         tau = (torch.ones(B) * taus[i]).to(device)  # tau_i; B-dim
         taup = (torch.ones(B) * taus[i-1]).to(device)  # tau_{i-1}; B-dim
@@ -124,10 +124,10 @@ def posterior_sample(dm, net, model, get_loss_grads, support_batch, cand_size, t
             beta = 1. - alpha
             x0_tweedie = (adapters - bb.sqrt()*eps) / ab.sqrt()
             means_temp = []
-            for i, adapter in enumerate(x0_tweedie):
+            for j, adapter in tqdm(enumerate(x0_tweedie), total=len(x0_tweedie), desc='DPS Adapters', position=1, leave=False, ncols=80):
                 loss, grad = get_loss_grads(model, adapter, support_batch)
                 losses.append(loss)
-                mean_temp = mean[i] + beta[i] * grad
+                mean_temp = mean[j] + beta[j] * grad
                 means_temp.append(mean_temp)
             mean = torch.vstack(means_temp).to(device)
         if p_var == 'original':
