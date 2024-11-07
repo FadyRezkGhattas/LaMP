@@ -57,8 +57,8 @@ parser.add_argument('--diff_ckpt', type=str, default='/home/CORP/fady.rezk/Deskt
 parser.add_argument('--diff_hdim', type=int, default=7680, help='hidden dim of diff net')
 parser.add_argument('--diff_nhids', type=int, default=3, help='num of hidden layers in diff net')
 parser.add_argument('--diff_odim', type=int, default=2592, help='size of input and output dimensionality of the diffusion model')
-parser.add_argument('--cand_size', type=int, default=5, help='size of input and output dimensionality of the diffusion model')
-parser.add_argument('--timestep_dps', type=int, default=20, help='size of input and output dimensionality of the diffusion model')
+parser.add_argument('--cand_size', type=int, default=20, help='size of input and output dimensionality of the diffusion model')
+parser.add_argument('--timestep_dps', type=int, default=10, help='size of input and output dimensionality of the diffusion model')
 
 def collect_grads(model):
     """Collect gradients from all parameters"""
