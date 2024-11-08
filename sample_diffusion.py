@@ -36,8 +36,8 @@ model_zoo = greedy_sample(gaussian_diff, diffusion_net, opts.diff_sampling_round
 
 if opts.reverse_z_score and opts.sampling_routine == 'standard':
     mean, std = LMDBDataset(opts.lmdb_addr).get_data_stats()
-    device = model_zoo[0].device
-    model_zoo = [mean.to(device) + (x*std.to(device)) for x in model_zoo]
+    device = 'cpu'
+    model_zoo = [mean.to(device) + (x.to(device)*std.to(device)) for x in model_zoo]
 
 if opts.sampling_routine == 'pcaed':
     # inverse stats used to train the diffusion model
