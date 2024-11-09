@@ -86,12 +86,3 @@ class AdditiveEmbedMLP(nn.Module):
         h = self.layers[-1](h+temb)
 
         return h
-    
-def get_model(opts):
-    diffusion_network = AdditiveEmbedMLP(opts.diff_odim, opts.diff_hdim, opts.diff_nhids)
-    ckpt = torch.load(opts.diff_ckpt, map_location='cuda')
-    if "ema" in ckpt:
-        diffusion_network.load_state_dict(ckpt["ema"])
-    else:
-        diffusion_network.load_state_dict(ckpt)
-    return diffusion_network
