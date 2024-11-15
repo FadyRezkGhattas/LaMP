@@ -37,7 +37,7 @@ if args.experiment == 'find_num_clusters':
     fits = []
     score = []
     cluster_sizes = []
-    K = range(args.from_num_clusters, args.to_num_clusters)
+    K = range(args.from_num_clusters, args.to_num_clusters + 1)
 
     for k in tqdm(K, desc='Num of clusters'):
         # train the model for current value of k on training data
