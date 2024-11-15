@@ -23,7 +23,7 @@ from prompts.singular_prompts import create_prompt_generator
 from load_adapters import tensorize_loraxs_adapter
 from data.datasets import GeneralSeq2SeqProfileDataset, create_preprocessor, convert_to_hf_dataset
 
-from diffusion.net import get_model
+# from diffusion.net import get_model
 from diffusion.gaussian_diffusion import GaussianDiffusion
 from diffusion.sample import greedy_sample
 
@@ -49,19 +49,10 @@ parser.add_argument("--cache_dir", default = "./cache")
 parser.add_argument('--num_tasks', type=int, default=-1, help='total number of tasks to evaluate model zoo on. If -1, all users are evaluated.')
 parser.add_argument('--early_stop', type=int, default=1e10, help='how many steps to wait for performance to not improve before skipping the rest of the model zoo')
 parser.add_argument('--truncate_profile_size', type=int, default=-1, help='if > 0, then the profile size is truncated to max of given value.')
-# parser.add_argument('--selection_metric', type=str, choices=['loss', 'best_metric'], default='loss', help='Whether to use support loss for adapter selection or dataset specific metric (best_metric)')
-# parser.add_argument('--track_query', default=False, help='Whether to calculate query for every adapter. Computationally expensive for selection_metric=`best_metric`')
 
 # diffusion model and model zoo
-parser.add_argument('--use_diffusion', type=bool, default=False)
-parser.add_argument('--reverse_z_score', type=bool, default=True, help='If True, the lmdb dataset statistics are computed to reverse z-score of model')
 parser.add_argument('--lmdb_addr', type=str, default='lmdb_data/LaMP-2-final')
 parser.add_argument('--lmdb_clusters', type=str, default=None, help='If provided, the medoids are used to chose a cluster whose adapters are evaluated for a user.')
-parser.add_argument('--truncate_lmdb_dataset', type=int, default=-1, help='if > 0, then the lmdb dataset will be subsampled to have len=truncate_lmdb_dataset.')
-parser.add_argument('--diff_ckpt', type=str, default='./experiments/LaMP-2/diffusion/LaMP-2_normalize_data_3x_241007_204226/final_ckpt.pt', help='path to diffusion model for sampling model zoo')
-parser.add_argument('--diff_hdim', type=int, default=7680, help='hidden dim of diff net')
-parser.add_argument('--diff_nhids', type=int, default=3, help='num of hidden layers in diff net')
-parser.add_argument('--diff_odim', type=int, default=2592, help='size of input and output dimensionality of the diffusion model')
 
 def eval_adapters_losses_user(opts, output_dir, original_model, collator, tokenizer, profile_data, adapters):
     user_support_perf = [] # shape: num_adapters
@@ -168,23 +159,9 @@ if __name__ == '__main__':
         user_data = json.load(f)
 
     # Loading model zoo
-    print("Loading/Sampling Adapters")
-    if opts.use_diffusion:
-        # load diffusion model
-        diffusion_net = get_model(opts).to('cuda')
-        # load diffusion sampler
-        gaussian_diff = GaussianDiffusion().to('cuda')
-        # sample model zoo
-        model_zoo = greedy_sample(gaussian_diff, diffusion_net)
-        # reverse batch z-score if necessary
-        if opts.reverse_z_score:
-            mean, std = LMDBDataset(opts.lmdb_addr).get_data_stats()
-            device = model_zoo[0].device
-            model_zoo = [mean.to(device) + (x*std.to(device)) for x in model_zoo]
-    else:
-        model_zoo = LMDBDataset(opts.lmdb_addr)
-        if opts.truncate_lmdb_dataset > -1:
-            model_zoo = Subset(model_zoo, list(range(opts.truncate_lmdb_dataset)))
+    print("Loading Adapters")
+    model_zoo = LMDBDataset(opts.lmdb_addr)
+
     # tensorize model zoo
     print("Tensorizing finite hypothesis")
     adapters = []
