@@ -51,7 +51,7 @@ parser.add_argument('--lmdb_clusters', type=str, default=None, help='If provided
 parser.add_argument('--num_lorahub_adapters', type=int, default=20)
 parser.add_argument('--max_inference_step', type=int, default=40)
 
-def get_adapter_loss(opts, output_dir, model, collator, tokenizer, profile_data, adapter):    
+def get_adapter_loss(opts, output_dir, model, collator, tokenizer, profile_data):    
     support_loss_args = Seq2SeqTrainingArguments(
         output_dir = output_dir,
         do_eval = True,
@@ -69,9 +69,8 @@ def get_adapter_loss(opts, output_dir, model, collator, tokenizer, profile_data,
         tokenizer = tokenizer
     )
     loss_evaluator.remove_callback(PrinterCallback)
-    
+
     # insert adapter into model
-    _ = model.load_state_dict(adapter, strict=False)
     results = loss_evaluator.evaluate(profile_data)
     adapter_selection_metric_val = results['eval_loss']
     
@@ -103,7 +102,7 @@ def get_score(weights, model, profile_data, get_loss, get_reg, selected_adapters
     _ = model.load_state_dict(adapter, strict=False)
         
     # minimize the metric
-    loss = get_loss(profile_data=profile_data, adapter=adapter)
+    loss = get_loss(model=model, profile_data=profile_data)
 
     # L1 regularization term
     metric_val = loss + get_reg(weights)
@@ -188,7 +187,7 @@ if __name__ == "__main__":
         selected_adapters = [adapters[id_] for id_ in selected_adapters_ids]
 
         # prepare the minimization function for nevergrad
-        get_adapter_loss_partial = partial(get_adapter_loss, opts=opts, output_dir=output_dir, model=original_model, collator=collator, tokenizer=tokenizer)
+        get_adapter_loss_partial = partial(get_adapter_loss, opts=opts, output_dir=output_dir, collator=collator, tokenizer=tokenizer)
         get_score_partial = partial(get_score, model=original_model, profile_data=profile_data, get_loss = get_adapter_loss_partial, get_reg=default_l1_regularization, selected_adapters=selected_adapters)
         
         # set up the limit of the weights, and minimize with nevergrad
