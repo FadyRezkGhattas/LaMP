@@ -83,8 +83,7 @@ def default_l1_regularization(weights):
     sum_of_squares = sum([abs(x) for x in weights]) / len(weights)
     return 0.05 * sum_of_squares
 
-def get_score(weights, model, profile_data, get_loss, get_reg, selected_adapters):
-    # the composed lora state dict
+def make_linear_combinations_adapter(selected_adapters, weights):
     adapter = {}
     # all keys are the same
     keys = selected_adapters[0].keys()
@@ -97,6 +96,11 @@ def get_score(weights, model, profile_data, get_loss, get_reg, selected_adapters
                 adapter[key] = (
                     adapter[key] + weights[i] * selected_adapter[key]
                 )
+    return adapter
+
+def get_score(weights, model, profile_data, get_loss, get_reg, selected_adapters):
+    # the composed lora state dict
+    adapter = make_linear_combinations_adapter(selected_adapters, weights)
 
     # reload the model with the new adapter config
     _ = model.load_state_dict(adapter, strict=False)
@@ -200,8 +204,8 @@ if __name__ == "__main__":
         recommendation = optimizer.minimize(get_score_partial, verbosity=1)
 
         # construct final state dict, load to model and make prediction
-        final_adapter = {}
         weights = recommendation.value
+        final_adapter = make_linear_combinations_adapter(selected_adapters, weights)
         tokenized_prediction = get_adapter_prediction(opts, original_model, tokenizer, final_adapter, generation_config, query_data)
         txt_prediction = tokenizer.decode(tokenized_prediction, skip_special_tokens=True)
 
