@@ -179,7 +179,7 @@ if __name__ == "__main__":
         profile_data = GeneralSeq2SeqProfileDataset(task, prompt_generator, val=False, user_id=user_id, data=user_data[user_id], truncate_profile_size=opts.truncate_profile_size)
         profile_data = convert_to_hf_dataset(profile_data, cache_dir = opts.cache_dir).map(create_preprocessor(tokenizer = tokenizer, max_length = opts.max_length), batched=True)
         query_data = GeneralSeq2SeqProfileDataset(task, prompt_generator, val=True, user_id=user_id, data=user_data[user_id])
-        txt_labels.append(query_data[0]['target'])
+        txt_label = query_data[0]['target']
         query_data = convert_to_hf_dataset(query_data, cache_dir = opts.cache_dir).map(create_preprocessor(tokenizer = tokenizer, max_length = opts.max_length), batched=True)
 
         t0 = time.time()
@@ -214,9 +214,9 @@ if __name__ == "__main__":
             json.dump({
                 'user_ids': user_id,
                 'final_loss': recommendation.loss,
-                'label': txt_labels[-1],
+                'label': txt_label,
                 'pred': txt_prediction,
-                'chosen_adapters': selected_adapters_ids,
-                'weights': weights,
+                'chosen_adapters': selected_adapters_ids.tolist(),
+                'weights': weights.tolist(),
                 'adapters_eval_time': t1-t0
             }, file, indent = 4)
