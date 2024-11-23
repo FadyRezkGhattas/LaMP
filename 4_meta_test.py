@@ -132,6 +132,10 @@ if __name__ == '__main__':
     output_dir = os.path.join('./experiments', opts.task, f'{dataset_name}_stage_4_{opts.exp_name}')
     log_files_pth = os.path.join(output_dir, 'per_user')
 
+    os.makedirs(output_dir, exist_ok=True)
+    with open(os.path.join(output_dir, "hyperparameters.json"), 'w') as f:
+        json.dump(vars(opts), f)
+
     print("Loading Model")
     original_model = AutoModelForSeq2SeqLM.from_pretrained(opts.model_name)
     tokenizer = AutoTokenizer.from_pretrained("google/flan-t5-base", cache_dir="./cache")
