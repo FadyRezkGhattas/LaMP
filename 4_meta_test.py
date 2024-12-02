@@ -84,12 +84,12 @@ def eval_adapters_losses_user(opts, output_dir, original_model, collator, tokeni
     
     return user_support_perf
 
-def eval_adapters_accuracies_user(opts, output_dir, original_model, collator, tokenizer, compute_metrics, adapters, best_adapters_idx, profile_data):
+def eval_adapters_accuracies_user(opts, output_dir, original_model, collator, tokenizer, compute_metrics, adapters, best_adapters_idx, profile_data, generation_num_beams):
     support_acc_args = Seq2SeqTrainingArguments(
         output_dir = output_dir,
         do_eval = True,
         per_device_eval_batch_size = opts.per_device_batch_size,
-        generation_num_beams = 1,
+        generation_num_beams = generation_num_beams,
         predict_with_generate = True,
         eval_accumulation_steps = 1,
         generation_max_length = opts.max_generation_length,
@@ -226,11 +226,13 @@ if __name__ == '__main__':
             best_15_adapters_idx = [cluster_adapters_idx[i] for i in best_15_adapters_cluster_idx]
             user_support_perf = user_support_perf_cluster
         # get accuracies on best 15 adapters. predictions are generated with greedy sampling
-        best_15_adapters_accuracies = eval_adapters_accuracies_user_(best_adapters_idx=best_15_adapters_idx, profile_data=profile_data)
+        best_15_adapters_accuracies = eval_adapters_accuracies_user_(best_adapters_idx=best_15_adapters_idx, profile_data=profile_data, generation_num_beams=1)
         # Get beam searched prediction on best adapter of the shortlisted 15
         best_adapter_id = best_15_adapters_idx[np.argmax(best_15_adapters_accuracies)]
         tokenized_prediction = get_best_adapter_prediction_(adapter_id=best_adapter_id, query_data=query_data)
         t1 = time.time()
+
+        best_adapter_support_metrics = eval_adapters_accuracies_user_(best_adapters_idx=[best_adapter_id], profile_data=profile_data, generation_num_beams=opts.generation_num_beams)
 
         tokenized_predictions.append(tokenized_prediction)
         best_adapter_ids.append(int(best_adapter_id))
@@ -248,7 +250,8 @@ if __name__ == '__main__':
                 'best_adapter_ids': int(best_adapter_id),
                 'user_train_perfs': user_support_perf,
                 'best_15_adapters_accuracies': best_15_adapters_accuracies,
-                'adapters_eval_time': t1-t0
+                'adapters_eval_time': t1-t0,
+                'best_adapter_support_metrics': best_adapter_support_metrics
             }, file, indent = 4)
         task_counter += 1
         if task_counter == opts.num_tasks:
