@@ -31,7 +31,7 @@ import warnings
 warnings.filterwarnings("ignore")
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--exp_name", default="diff", help="used to log results in ./experiments/{task}/{dataset_name}_stage_4_{exp_name}")
+parser.add_argument("--exp_name", default="mlp4x3l_5_clusters_zoo", help="used to log results in ./experiments/{task}/{dataset_name}_stage_4_{exp_name}")
 parser.add_argument("--data_addr", default="./data_raw/user/LaMP_2/dev_questions_merged.json")
 parser.add_argument("--model_name", default='./experiments/LaMP-2/finetune_all_train_user_profiles/checkpoint-32000')
 parser.add_argument("--svd_pth", default='./experiments/fixed_adapter')
@@ -51,38 +51,8 @@ parser.add_argument('--early_stop', type=int, default=1e10, help='how many steps
 parser.add_argument('--truncate_profile_size', type=int, default=-1, help='if > 0, then the profile size is truncated to max of given value.')
 
 # diffusion model and model zoo
-parser.add_argument('--lmdb_addr', type=str, default='lmdb_data/LaMP-2-final')
+parser.add_argument('--lmdb_addr', type=str, default='lmdb_data/LaMP-2-final-4x3l-diff-samples')
 parser.add_argument('--lmdb_clusters', type=str, default=None, help='If provided, the medoids are used to chose a cluster whose adapters are evaluated for a user.')
-
-def eval_adapters_losses_user(opts, output_dir, original_model, collator, tokenizer, profile_data, adapters):
-    user_support_perf = [] # shape: num_adapters
-    
-    support_loss_args = Seq2SeqTrainingArguments(
-        output_dir = output_dir,
-        do_eval = True,
-        per_device_eval_batch_size = opts.per_device_batch_size,
-        eval_accumulation_steps = 1,
-        generation_max_length = opts.max_generation_length,
-        disable_tqdm=True,
-        bf16=opts.use_bf16
-    )
-    loss_evaluator = Seq2SeqTrainer(
-        model = original_model,
-        args = support_loss_args,
-        data_collator = collator,
-        eval_dataset = profile_data,
-        tokenizer = tokenizer
-    )
-    loss_evaluator.remove_callback(PrinterCallback)
-    
-    for adapter_id in tqdm(range(len(adapters)), leave=False, desc='All Adapters', position=1):
-        # insert adapter into model
-        _ = original_model.load_state_dict(adapters[adapter_id], strict=False)
-        results = loss_evaluator.evaluate(profile_data)
-        adapter_selection_metric_val = results['eval_loss']
-        user_support_perf.append(adapter_selection_metric_val)
-    
-    return user_support_perf
 
 def eval_adapters_accuracies_user(opts, output_dir, original_model, collator, tokenizer, compute_metrics, adapters, best_adapters_idx, profile_data, generation_num_beams):
     support_acc_args = Seq2SeqTrainingArguments(
@@ -116,15 +86,6 @@ def eval_adapters_accuracies_user(opts, output_dir, original_model, collator, to
         adapter_selection_metric_val = results['eval_'+best_metric]
         best_adapters_accuracies.append(adapter_selection_metric_val)
     return best_adapters_accuracies
-
-def get_adapter_prediction(opts, original_model, tokenizer, adapters, adapter_id, query_data):
-    _ = original_model.load_state_dict(adapters[adapter_id], strict=False)
-    # get query prediction
-    inputs = tokenizer(query_data[0]["source"], truncation=True, max_length=opts.max_length, return_tensors="pt").to('cuda')
-    outputs = original_model.generate(**inputs, num_beams=opts.generation_num_beams, generation_config=generation_config, max_new_tokens=opts.max_generation_length)
-    outputs = outputs.to('cpu')
-    tokenized_prediction = F.pad(outputs[0], (tokenizer.pad_token_id, opts.max_generation_length - len(outputs[0])))
-    return tokenized_prediction
 
 if __name__ == '__main__':
     opts = parser.parse_args()
@@ -182,94 +143,21 @@ if __name__ == '__main__':
     best_train_metrics = [] # shape: number_users x1
     collator = DataCollatorForSeq2Seq(tokenizer = tokenizer, model = original_model)
 
-    if opts.lmdb_clusters is None:
-        eval_adapters_losses_user_ = partial(eval_adapters_losses_user, opts=opts, output_dir=output_dir, original_model=original_model, collator=collator, tokenizer=tokenizer, adapters=adapters)
-    else:
-        with open(opts.lmdb_clusters) as f:
-            lmdb_clusters = json.load(f)
-        medoids_ids = lmdb_clusters['medoids']
-        clusters_ids = lmdb_clusters['clusters']
-    get_best_adapter_prediction_ = partial(get_adapter_prediction, opts=opts, original_model=original_model, tokenizer=tokenizer, adapters=adapters)
     eval_adapters_accuracies_user_ = partial(eval_adapters_accuracies_user, opts=opts, output_dir=output_dir, original_model=original_model, collator=collator, tokenizer=tokenizer, compute_metrics=compute_metrics, adapters=adapters)
 
-    task_counter = 0
-    from_, to_ = opts.from_user_id, opts.to_user_id if opts.to_user_id != -1 else len(user_data)
-    for user_id in tqdm(range(from_, to_), leave=True, desc='Users', position=0):
-        if Path(os.path.join(log_files_pth, f'{opts.exp_name}results_user_{user_id}.json')).is_file():
-            continue
-        user_ids.append(user_id)
+    for user_id in tqdm(range(len(user_data)), leave=True, desc='Users', position=0):
+        user_log = os.path.join(log_files_pth, f'{opts.exp_name}results_user_{user_id}.json')
+        with open(user_log) as f:
+            user_log_data = json.load(f)
+        best_adapter_id = user_log_data['best_adapter_ids']
 
         # load user profile and query
         profile_data = GeneralSeq2SeqProfileDataset(task, prompt_generator, val=False, user_id=user_id, data=user_data[user_id], truncate_profile_size=opts.truncate_profile_size)
         profile_data = convert_to_hf_dataset(profile_data, cache_dir = opts.cache_dir).map(create_preprocessor(tokenizer = tokenizer, max_length = opts.max_length), batched=True)
-        query_data = GeneralSeq2SeqProfileDataset(task, prompt_generator, val=True, user_id=user_id, data=user_data[user_id])
-        txt_labels.append(query_data[0]['target'])
-        query_data = convert_to_hf_dataset(query_data, cache_dir = opts.cache_dir).map(create_preprocessor(tokenizer = tokenizer, max_length = opts.max_length), batched=True)
-
-        t0 = time.time()
-        if opts.lmdb_clusters is None:
-            # Get losses of all adapters
-            user_support_perf = eval_adapters_losses_user_(profile_data=profile_data)
-            # Get best 15 adapters indices
-            best_15_adapters_idx = np.argsort(user_support_perf)[:15]
-        else:
-            # Get losses for medoids
-            medoid_adapters = [adapters[i] for i in medoids_ids]
-            user_support_perf_medoids = eval_adapters_losses_user(opts, output_dir, original_model, collator, tokenizer, profile_data, medoid_adapters)
-            # get losses on the cluster with the best performing medoid
-            best_cluster_idx = np.argmin(user_support_perf_medoids)
-            cluster_adapters_idx = clusters_ids[best_cluster_idx]
-            cluster_adapters = [adapters[i] for i in cluster_adapters_idx]
-            user_support_perf_cluster = eval_adapters_losses_user(opts, output_dir, original_model, collator, tokenizer, profile_data, cluster_adapters)
-            # Get best 15 adapters indices
-            best_15_adapters_cluster_idx = np.argsort(user_support_perf_cluster)[:15]
-            best_15_adapters_idx = [cluster_adapters_idx[i] for i in best_15_adapters_cluster_idx]
-            user_support_perf = user_support_perf_cluster
-        # get accuracies on best 15 adapters. predictions are generated with greedy sampling
-        best_15_adapters_accuracies = eval_adapters_accuracies_user_(best_adapters_idx=best_15_adapters_idx, profile_data=profile_data, generation_num_beams=1)
-        # Get beam searched prediction on best adapter of the shortlisted 15
-        best_adapter_id = best_15_adapters_idx[np.argmax(best_15_adapters_accuracies)]
-        tokenized_prediction = get_best_adapter_prediction_(adapter_id=best_adapter_id, query_data=query_data)
-        t1 = time.time()
 
         best_adapter_support_metrics = eval_adapters_accuracies_user_(best_adapters_idx=[best_adapter_id], profile_data=profile_data, generation_num_beams=opts.generation_num_beams)
 
-        tokenized_predictions.append(tokenized_prediction)
-        best_adapter_ids.append(int(best_adapter_id))
-        support_performance_all_users.append(user_support_perf)
+        user_log_data['best_adapter_support_metrics'] = best_adapter_support_metrics
 
-        # log user final results
-        txt_prediction = tokenizer.decode(tokenized_prediction, skip_special_tokens=True)
-        if not os.path.exists(log_files_pth):
-            os.makedirs(log_files_pth)
-        with open(os.path.join(log_files_pth, f'{opts.exp_name}results_user_{user_id}.json'), 'w') as file:
-            json.dump({
-                'user_ids': user_id,
-                'label': txt_labels[-1],
-                'pred': txt_prediction,
-                'best_adapter_ids': int(best_adapter_id),
-                'user_train_perfs': user_support_perf,
-                'best_15_adapters_accuracies': best_15_adapters_accuracies,
-                'adapters_eval_time': t1-t0,
-                'best_adapter_support_metrics': best_adapter_support_metrics
-            }, file, indent = 4)
-        task_counter += 1
-        if task_counter == opts.num_tasks:
-            break
-    txt_predictions = tokenizer.batch_decode(tokenized_predictions, skip_special_tokens=True)
-    
-    tokenized_labels = tokenizer(txt_labels)['input_ids']
-    tokenized_labels = np.array([np.pad(torch.tensor(x), (tokenizer.pad_token_id, opts.max_generation_length - len(x))) for x in tokenized_labels])
-    results = compute_metrics((tokenized_predictions, tokenized_labels))
-    print(results)
-    
-    with open(os.path.join(output_dir, f'{opts.exp_name}results.json'), 'w') as file:
-        json.dump({
-            **results,
-            'user_ids':user_ids,
-            'labels':txt_labels,
-            'preds': txt_predictions,
-            'best_adapter_ids': best_adapter_ids,
-            'user_train_perfs': support_performance_all_users,
-            'best_train_metrics': best_train_metrics
-        }, file, indent = 4)
+        with open(user_log, 'w') as file:
+            json.dump(user_log_data, file, indent = 4)
