@@ -130,7 +130,7 @@ if __name__ == "__main__":
     torch.manual_seed(opts.seed)
 
     dataset_name = opts.data_addr.split('/')[-1].split('.')[0]
-    output_dir = os.path.join('./experiments', opts.task, f'{dataset_name}_lora_hub')
+    output_dir = os.path.join('./experiments', opts.task, f'{dataset_name}_lora_hub_{opts.exp_name}')
     log_files_pth = os.path.join(output_dir, 'per_user')
 
     # Log hyperparameters
@@ -179,7 +179,7 @@ if __name__ == "__main__":
 
     from_, to_ = opts.from_user_id, opts.to_user_id if opts.to_user_id != -1 else len(user_data)
     for user_id in tqdm(range(from_, to_), leave=True, desc='Users', position=0):
-        if Path(os.path.join(log_files_pth, f'{opts.exp_name}results_user_{user_id}.json')).is_file():
+        if Path(os.path.join(log_files_pth, f'{opts.exp_name}_results_user_{user_id}.json')).is_file():
             continue
 
         # load user profile and query
