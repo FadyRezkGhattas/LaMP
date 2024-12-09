@@ -127,7 +127,7 @@ def get_adapter_prediction(opts, original_model, tokenizer, adapter, generation_
 if __name__ == "__main__":
     opts = parser.parse_args()
     np.random.seed(opts.seed)
-    torch.seed(opts.seed)
+    torch.manual_seed(opts.seed)
 
     dataset_name = opts.data_addr.split('/')[-1].split('.')[0]
     output_dir = os.path.join('./experiments', opts.task, f'{dataset_name}_lora_hub')
