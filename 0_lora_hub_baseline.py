@@ -7,6 +7,7 @@ from tqdm import tqdm
 from pathlib import Path
 from functools import partial
 
+import torch
 import numpy as np
 import nevergrad as ng
 import torch.nn.functional as F
@@ -24,7 +25,8 @@ from data.datasets import GeneralSeq2SeqProfileDataset, create_preprocessor, con
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--exp_name", default="diff", help="used to log results in ./experiments/{task}/{dataset_name}_lora_hub")
+parser.add_argument("--seed", required=True, type=int)
+parser.add_argument("--exp_name", default="", help="used to log results in ./experiments/{task}/{dataset_name}_lora_hub")
 parser.add_argument("--data_addr", default="./data_raw/user/LaMP_2/dev_questions_merged.json")
 parser.add_argument("--model_name", default='./experiments/LaMP-2/finetune_all_train_user_profiles/checkpoint-32000')
 parser.add_argument("--svd_pth", default='./experiments/fixed_adapter')
@@ -124,6 +126,8 @@ def get_adapter_prediction(opts, original_model, tokenizer, adapter, generation_
 
 if __name__ == "__main__":
     opts = parser.parse_args()
+    np.random.seed(opts.seed)
+    torch.seed(opts.seed)
 
     dataset_name = opts.data_addr.split('/')[-1].split('.')[0]
     output_dir = os.path.join('./experiments', opts.task, f'{dataset_name}_lora_hub')
