@@ -24,7 +24,7 @@ parser.add_argument("--num_tasks", type=int, default=-1, help="Train for fixed n
 parser.add_argument("--from_user_id", type=int, default=0, help="Train model starting from this user index.")
 parser.add_argument("--to_user_id", type=int, default=-1, help="Terminate training at this user index. If -1, train until end of available users.")
 parser.add_argument('--truncate_profile_size', type=int, default=-1, help='if > 0, then the profile size is truncated to max of given value.')
-parser.add_argument("--data_addr", default="./data_raw/user/LaMP_2/train_questions_merged.json")
+parser.add_argument("--data_addr", default="./data_raw/user/LaMP_2/dev_questions_merged.json")
 parser.add_argument("--model_name", default='./experiments/LaMP-2/finetune_all_train_user_profiles/checkpoint-32000')
 parser.add_argument("--svd_pth", default='./experiments/fixed_adapter')
 parser.add_argument("--rank", type=int, default=6)
