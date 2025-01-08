@@ -148,7 +148,7 @@ class GeneralSeq2SeqProfilesDataset(Dataset):
         return len(self.data)
 
 class GeneralSeq2SeqProfileDataset(Dataset):
-    def __init__(self, task, create_prompt, val=False, user_id=None, data=None, data_addr=None, truncate_profile_size=-1) -> None:
+    def __init__(self, task, create_prompt, val=False, user_id=None, data=None, data_addr=None, truncate_profile_size=-1, training_ratio=None) -> None:
         """
         Loads dataset for specified task and user.
 
@@ -160,6 +160,7 @@ class GeneralSeq2SeqProfileDataset(Dataset):
             - **data** (a list of dict) : Data to use for this dataset. If given, it's assumed to be a single user.
             - **data_addr** (str) : Path to the data file.
             - **truncate_profile_size** (int): The number of max samples to include from a user's profile. Ignored if < 1.
+            - **training_ratio** (int or None): A ratio to split the profile into training and validation sets. The split ratio If None, no split will be performed.
         
         Returns:
             A dictionary containing the loaded dataset and its metadata
@@ -175,6 +176,7 @@ class GeneralSeq2SeqProfileDataset(Dataset):
         self.task = task
         self.create_prompt = create_prompt
         self.val = val
+        self.training_ratio = training_ratio
 
         assert (data is None and data_addr != '') or (data != '' and data_addr is None), "Either data or data_addr must not be empty."
         if data_addr is not None:
@@ -185,17 +187,34 @@ class GeneralSeq2SeqProfileDataset(Dataset):
         elif data is not None:
             self.data = data
         self.i_key, self.o_key = get_io_keys(self.task)
+        
+        self.split_profile()
 
         if truncate_profile_size > 0 and len(self.data['profile']) > truncate_profile_size:
             self.data['profile'] = self.data['profile'][:truncate_profile_size]
 
+    def split_profile(self):
+        if self.training_ratio is not None:
+            profile_len = len(self.data['profile'])
+            split_index = int(profile_len * self.training_ratio)
+            # if the split index is too high that we have no val samples or a single val sample (i.e: profile is 3 or 4 samples and training ratio is 0.8) then split with ratio of 0.5
+            if split_index == profile_len or profile_len - split_index == 1:
+                split_index = int(profile_len * 0.5)
+        if self.val:
+            self.data['profile'] = self.data['profile'][split_index:]
+        else:
+            self.data['profile'] = self.data['profile'][:split_index]
+
     def __getitem__(self, index):
-        if not self.val:
+        # if requesting training data return profile item with index.
+        # if requesting training or validation data but we split the profile, then return the profile item with index (the data was split in place)
+        if not self.val or self.training_ratio is not None:
             return {
                 "id" : self.data['profile'][index]['id'],
                 "source" : self.create_prompt(self.data['profile'][index][self.i_key], self.task),
                 "target" : self.data['profile'][index][self.o_key]
             }
+        # if requesting val data and profile was not split, then return the single query sample provided by lamp benchmark
         else:
             return {
                 "id" : self.data['id'],
@@ -204,7 +223,7 @@ class GeneralSeq2SeqProfileDataset(Dataset):
             }
     
     def __len__(self):
-        if not self.val:
+        if not self.val or self.training_ratio is not None:
             return len(self.data['profile'])
         else:
             return 1
