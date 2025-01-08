@@ -3,6 +3,7 @@ import json
 import yaml
 import copy
 import argparse
+from tqdm import tqdm
 from rich import print
 
 from accelerate import Accelerator
@@ -75,7 +76,7 @@ if __name__ == "__main__":
 
     task_counter = 0
     from_, to_ = opts.from_user_id, opts.to_user_id if opts.to_user_id != -1 else len(data)
-    for user_id in range(from_, to_):
+    for user_id in tqdm(range(from_, to_)):
         # If adapter exists for user, skip
         ckpt_path = os.path.join(opts.output_dir, 'ckpts', "user_" + str(user_id))
         if os.path.isfile(os.path.join(ckpt_path, 'adapter_model.safetensors')):
