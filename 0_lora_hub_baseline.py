@@ -44,10 +44,8 @@ parser.add_argument("--cache_dir", default = "./cache")
 parser.add_argument('--num_tasks', type=int, default=-1, help='total number of tasks to evaluate model zoo on. If -1, all users are evaluated.')
 parser.add_argument('--early_stop', type=int, default=1e10, help='how many steps to wait for performance to not improve before skipping the rest of the model zoo')
 parser.add_argument('--truncate_profile_size', type=int, default=-1, help='if > 0, then the profile size is truncated to max of given value.')
-
-# diffusion model and model zoo
+parser.add_argument('--profile_training_ratio', type=float, default=None, help='A ratio to split the profile into training and validation sets. The split ratio If None, no split will be performed.')
 parser.add_argument('--lmdb_addr', type=str, default='lmdb_data/LaMP-2-final')
-parser.add_argument('--lmdb_clusters', type=str, default=None, help='If provided, the medoids are used to chose a cluster whose adapters are evaluated for a user.')
 
 # LoraHub hyperparameters
 parser.add_argument('--num_lorahub_adapters', type=int, default=20)
@@ -117,12 +115,15 @@ def get_score(weights, model, profile_data, get_loss, get_reg, selected_adapters
 
 def get_adapter_prediction(opts, original_model, tokenizer, adapter, generation_config, query_data):
     _ = original_model.load_state_dict(adapter, strict=False)
-    # get query prediction
-    inputs = tokenizer(query_data[0]["source"], truncation=True, max_length=opts.max_length, return_tensors="pt").to('cuda')
-    outputs = original_model.generate(**inputs, num_beams=opts.generation_num_beams, generation_config=generation_config, max_new_tokens=opts.max_generation_length)
-    outputs = outputs.to('cpu')
-    tokenized_prediction = F.pad(outputs[0], (tokenizer.pad_token_id, opts.max_generation_length - len(outputs[0])))
-    return tokenized_prediction
+    tokenized_predictions = []
+    for i in range(len(query_data)):
+        # get query prediction
+        inputs = tokenizer(query_data[i]["source"], truncation=True, max_length=opts.max_length, return_tensors="pt").to('cuda')
+        outputs = original_model.generate(**inputs, num_beams=opts.generation_num_beams, generation_config=generation_config, max_new_tokens=opts.max_generation_length)
+        outputs = outputs.to('cpu')
+        tokenized_prediction = F.pad(outputs[0], (tokenizer.pad_token_id, opts.max_generation_length - len(outputs[0])))
+        tokenized_predictions.append(tokenized_prediction)
+    return tokenized_predictions
 
 if __name__ == "__main__":
     opts = parser.parse_args()
@@ -183,10 +184,10 @@ if __name__ == "__main__":
             continue
 
         # load user profile and query
-        profile_data = GeneralSeq2SeqProfileDataset(task, prompt_generator, val=False, user_id=user_id, data=user_data[user_id], truncate_profile_size=opts.truncate_profile_size)
+        profile_data = GeneralSeq2SeqProfileDataset(task, prompt_generator, val=False, user_id=user_id, data=user_data[user_id], truncate_profile_size=opts.truncate_profile_size, training_ratio=opts.profile_training_ratio)
         profile_data = convert_to_hf_dataset(profile_data, cache_dir = opts.cache_dir).map(create_preprocessor(tokenizer = tokenizer, max_length = opts.max_length), batched=True)
-        query_data = GeneralSeq2SeqProfileDataset(task, prompt_generator, val=True, user_id=user_id, data=user_data[user_id])
-        txt_label = query_data[0]['target']
+        query_data = GeneralSeq2SeqProfileDataset(task, prompt_generator, val=True, user_id=user_id, data=user_data[user_id], training_ratio=opts.profile_training_ratio)
+        txt_labels_user = [query_data[i]['target'] for i in range(len(query_data))]
         query_data = convert_to_hf_dataset(query_data, cache_dir = opts.cache_dir).map(create_preprocessor(tokenizer = tokenizer, max_length = opts.max_length), batched=True)
 
         t0 = time.time()
@@ -210,8 +211,8 @@ if __name__ == "__main__":
         # construct final state dict, load to model and make prediction
         weights = recommendation.value
         final_adapter = make_linear_combinations_adapter(selected_adapters, weights)
-        tokenized_prediction = get_adapter_prediction(opts, original_model, tokenizer, final_adapter, generation_config, query_data)
-        txt_prediction = tokenizer.decode(tokenized_prediction, skip_special_tokens=True)
+        tokenized_predictions = get_adapter_prediction(opts, original_model, tokenizer, final_adapter, generation_config, query_data)
+        txt_predictions = tokenizer.batch_decode(tokenized_predictions, skip_special_tokens=True)
 
         t1 = time.time()
 
@@ -221,8 +222,8 @@ if __name__ == "__main__":
             json.dump({
                 'user_ids': user_id,
                 'final_loss': recommendation.loss,
-                'label': txt_label,
-                'pred': txt_prediction,
+                'label': txt_labels_user,
+                'pred': txt_predictions,
                 'chosen_adapters': selected_adapters_ids.tolist(),
                 'weights': weights.tolist(),
                 'adapters_eval_time': t1-t0
