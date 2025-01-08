@@ -40,7 +40,7 @@ parser.add_argument("--generation_num_beams", type = int, default = 4)
 parser.add_argument("--do_eval", type = bool, default = False)
 parser.add_argument("--gradient_accumulation_steps", type = int, default = 1)
 parser.add_argument("--cache_dir", default = "./cache")
-
+parser.add_argument('--profile_training_ratio', type=float, default=None, help='A ratio to split the profile into training and validation sets. The split ratio If None, no split will be performed.')
 
 if __name__ == "__main__":
     opts = parser.parse_args()
@@ -87,9 +87,9 @@ if __name__ == "__main__":
         prompt_generator = create_prompt_generator(tokenizer)
 
         # Profile data for training
-        train_dataset = GeneralSeq2SeqProfileDataset(task, prompt_generator, data=data[user_id], truncate_profile_size=opts.truncate_profile_size)
+        train_dataset = GeneralSeq2SeqProfileDataset(task, prompt_generator, data=data[user_id], truncate_profile_size=opts.truncate_profile_size, training_ratio=opts.profile_training_ratio)
         # Query sample to eval on
-        test_dataset = GeneralSeq2SeqProfileDataset(task, prompt_generator, data=data[user_id], val=True)
+        test_dataset = GeneralSeq2SeqProfileDataset(task, prompt_generator, data=data[user_id], val=True, training_ratio=opts.profile_training_ratio)
         
         train_dataset = convert_to_hf_dataset(train_dataset, cache_dir = opts.cache_dir).map(create_preprocessor(tokenizer = tokenizer, max_length = tokenizer.model_max_length), batched=True)
         eval_dataset = convert_to_hf_dataset(train_dataset, cache_dir = opts.cache_dir).map(create_preprocessor(tokenizer = tokenizer, max_length = tokenizer.model_max_length), batched=True)
