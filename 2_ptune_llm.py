@@ -88,6 +88,7 @@ if __name__ == "__main__":
 
         # Profile data for training
         train_dataset = GeneralSeq2SeqProfileDataset(task, prompt_generator, data=data[user_id], truncate_profile_size=opts.truncate_profile_size, training_ratio=opts.profile_training_ratio)
+        support_data_size = len(train_dataset)
         # Query sample to eval on
         test_dataset = GeneralSeq2SeqProfileDataset(task, prompt_generator, data=data[user_id], val=True, training_ratio=opts.profile_training_ratio)
         
@@ -149,7 +150,7 @@ if __name__ == "__main__":
 
         if accelerator.is_main_process:
             # Log results
-            logging_data = {'user_id': user_id, 'profile_size':len(train_dataset),  **pretrain_train_metrics, **pretrain_eval_metrics, **posttrain_train_metrics, **posttrain_test_metrics}
+            logging_data = {'user_id': user_id, 'profile_size':support_data_size,  **pretrain_train_metrics, **pretrain_eval_metrics, **posttrain_train_metrics, **posttrain_test_metrics}
             logger.log(trainer=None, extra_data=logging_data)
             task_counter += 1
 
