@@ -21,7 +21,7 @@ parser.add_argument("--model_name", default='./experiments/LaMP-2/finetune_all_t
 parser.add_argument('--truncate_profile_size', type=int, default=-1, help='if > 0, then the profile size is truncated to max of given value.')
 parser.add_argument("--task", default='LaMP-2')
 parser.add_argument("--output_dir", default='./experiments')
-parser.add_argument("--per_device_batch_size", type = int, default = 16)
+parser.add_argument("--per_device_batch_size", type = int, default = 64)
 parser.add_argument("--generation_max_length", type = int, default = 128)
 parser.add_argument("--max_length", type = int, default = 512)
 parser.add_argument("--generation_num_beams", type = int, default = 4)
