@@ -200,10 +200,12 @@ class GeneralSeq2SeqProfileDataset(Dataset):
             # if the split index is too high that we have no val samples or a single val sample (i.e: profile is 3 or 4 samples and training ratio is 0.8) then split with ratio of 0.5
             if split_index == profile_len or profile_len - split_index == 1:
                 split_index = int(profile_len * 0.5)
-        if self.val:
-            self.data['profile'] = self.data['profile'][split_index:]
-        else:
-            self.data['profile'] = self.data['profile'][:split_index]
+            
+            # update the profile to only include the samples before/after the split index
+            if self.val:
+                self.data['profile'] = self.data['profile'][split_index:]
+            else:
+                self.data['profile'] = self.data['profile'][:split_index]
 
     def __getitem__(self, index):
         # if requesting training data return profile item with index.
