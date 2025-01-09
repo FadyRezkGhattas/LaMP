@@ -17,7 +17,7 @@ from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, GenerationConfig
 
 from metrics.utils import get_metrics
 from load_adapters import load_adapter
-from data.datasets import GeneralSeq2SeqDataset
+from data.datasets import GeneralSeq2SeqProfileDataset
 from lora_xs.initialization_utils import find_and_initialize
 from prompts.singular_prompts import create_prompt_generator
 
@@ -31,6 +31,7 @@ parser.add_argument("--max_generation_length", type = int, default = 128)
 parser.add_argument("--generation_num_beams", type = int, default = 4)
 parser.add_argument("--cache_dir", default = "./cache")
 parser.add_argument('--model_zoo_addr', type=str, default='experiments/LaMP-2/sgd_baseline/r_6_alpha_16_lr_0.01_epochs_20_sch_linear/')
+parser.add_argument('--profile_training_ratio', type=float, default=None, help='A ratio to split the profile into training and validation sets. The split ratio If None, no split will be performed.')
 
 if __name__ == '__main__':
     opts = parser.parse_args()
@@ -69,7 +70,10 @@ if __name__ == '__main__':
     compute_metrics, best_metric, txt_labels, greater_is_better = get_metrics(task, tokenizer)
 
     prompt_generator = create_prompt_generator(tokenizer)
-    dataset = GeneralSeq2SeqDataset(opts.data_addr, use_profile=False, task=task, create_prompt=None)
+
+    with open(opts.data_addr) as f:
+        user_data = json.load(f)
+
 
     users = os.listdir(os.path.join(opts.model_zoo_addr, 'ckpts'))
     users = [int(x.split('_')[-1]) for x in users]
@@ -80,14 +84,17 @@ if __name__ == '__main__':
     with tqdm(total=len(users), desc='Processing Users') as pbar:
         for user_id in users:
             user_model = load_adapter(original_model, os.path.join(opts.model_zoo_addr, 'ckpts', f'user_{user_id}')).to('cuda')
-            item = dataset[user_id]
-            inputs = tokenizer(item["source"], truncation=True, max_length=opts.max_length, return_tensors="pt").to('cuda')
-            txt_labels.append(item['target'])
-            outputs = user_model.generate(**inputs, num_beams=4, generation_config=generation_config, max_new_tokens=opts.max_generation_length)
-            outputs = outputs.to('cpu')
-            # tokenized_predictions.append(outputs[0])
-            tokenized_predictions.append(F.pad(outputs[0], (tokenizer.pad_token_id, opts.max_generation_length - len(outputs[0]))))
-            user_ids.append(item['id'])
+            query_data = GeneralSeq2SeqProfileDataset(task, prompt_generator, val=True, user_id=user_id, data=user_data[user_id], training_ratio=opts.profile_training_ratio)
+
+            for i in tqdm(range(len(query_data)), leave=False):
+                # get query predictions
+                inputs = tokenizer(query_data[i]["source"], truncation=True, max_length=opts.max_length, return_tensors="pt").to('cuda')
+                txt_labels.append(query_data[i]['target'])
+                outputs = user_model.generate(**inputs, num_beams=opts.generation_num_beams, generation_config=generation_config, max_new_tokens=opts.max_generation_length)
+                outputs = outputs.to('cpu')
+                tokenized_prediction = F.pad(outputs[0], (tokenizer.pad_token_id, opts.max_generation_length - len(outputs[0])))
+                tokenized_predictions.append(tokenized_prediction)
+            user_ids.append(query_data[i]['id'])        
             pbar.update(1)
 
     txt_predictions = tokenizer.batch_decode(tokenized_predictions, skip_special_tokens=True)
