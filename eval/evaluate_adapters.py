@@ -84,7 +84,7 @@ if __name__ == '__main__':
     with tqdm(total=len(users), desc='Processing Users') as pbar:
         for user_id in users:
             user_model = load_adapter(original_model, os.path.join(opts.model_zoo_addr, 'ckpts', f'user_{user_id}')).to('cuda')
-            query_data = GeneralSeq2SeqProfileDataset(task, prompt_generator, val=True, user_id=user_id, data=user_data[user_id], training_ratio=opts.profile_training_ratio)
+            query_data = GeneralSeq2SeqProfileDataset(task, prompt_generator, val=True, data=user_data[user_id], training_ratio=opts.profile_training_ratio)
 
             for i in tqdm(range(len(query_data)), leave=False):
                 # get query predictions
