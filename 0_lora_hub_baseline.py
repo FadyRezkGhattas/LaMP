@@ -125,6 +125,36 @@ def get_adapter_prediction(opts, original_model, tokenizer, adapter, generation_
         tokenized_predictions.append(tokenized_prediction)
     return tokenized_predictions
 
+def get_support_metrics(opts, model, tokenizer, collator, final_adapter, profile_data, compute_metrics, best_metric):
+    _ = model.load_state_dict(final_adapter, strict=False)
+
+    support_loss_args = Seq2SeqTrainingArguments(
+        output_dir = output_dir,
+        do_eval = True,
+        per_device_eval_batch_size = opts.per_device_batch_size,
+        eval_accumulation_steps = 1,
+        disable_tqdm=True,
+        bf16=opts.use_bf16,
+        # generation args
+        generation_num_beams = opts.generation_num_beams,
+        predict_with_generate = True,
+        generation_max_length = opts.max_generation_length,
+    )
+    loss_evaluator = Seq2SeqTrainer(
+        model = model,
+        args = support_loss_args,
+        data_collator = collator,
+        eval_dataset = profile_data,
+        tokenizer = tokenizer,
+        compute_metrics=compute_metrics
+    )
+    loss_evaluator.remove_callback(PrinterCallback)
+
+    # insert adapter into model
+    results = loss_evaluator.evaluate(profile_data)
+    
+    return results[f"eval_{best_metric}"]
+
 if __name__ == "__main__":
     opts = parser.parse_args()
     np.random.seed(opts.seed)
@@ -214,6 +244,9 @@ if __name__ == "__main__":
         tokenized_predictions = get_adapter_prediction(opts, original_model, tokenizer, final_adapter, generation_config, query_data)
         txt_predictions = tokenizer.batch_decode(tokenized_predictions, skip_special_tokens=True)
 
+        # get support metrics
+        best_metric_support_value = get_support_metrics(opts, original_model, tokenizer, collator, final_adapter, profile_data, compute_metrics, best_metric)
+
         t1 = time.time()
 
         if not os.path.exists(log_files_pth):
@@ -226,5 +259,6 @@ if __name__ == "__main__":
                 'pred': txt_predictions,
                 'chosen_adapters': selected_adapters_ids.tolist(),
                 'weights': weights.tolist(),
-                'adapters_eval_time': t1-t0
+                'adapters_eval_time': t1-t0,
+                'best_support_metric': best_metric_support_value
             }, file, indent = 4)
