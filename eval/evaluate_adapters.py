@@ -160,8 +160,6 @@ if __name__ == '__main__':
                 }, file, indent = 4)
 
             pbar.update(1)
-
-    txt_predictions = tokenizer.batch_decode(tokenized_predictions, skip_special_tokens=True)
     
     tokenized_labels = tokenizer(txt_labels)['input_ids']
     tokenized_labels = np.array([np.pad(torch.tensor(x), (tokenizer.pad_token_id, opts.max_generation_length - len(x))) for x in tokenized_labels])
