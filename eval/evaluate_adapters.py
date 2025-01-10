@@ -128,6 +128,7 @@ if __name__ == '__main__':
     users = os.listdir(os.path.join(opts.model_zoo_addr, 'ckpts'))
     users = [int(x.split('_')[-1]) for x in users]
     
+    tokenized_predictions = []
     txt_predictions = []
     txt_labels = []
     user_ids = []
@@ -141,9 +142,10 @@ if __name__ == '__main__':
 
             # Get query performance
             data = GeneralSeq2SeqProfileDataset(task, prompt_generator, val=True, data=user_data[user_id], truncate_profile_size=opts.truncate_profile_size, training_ratio=opts.profile_training_ratio)
-            tokenized_predictions, txt_labels_user = get_adapter_predictions(opts, user_model, tokenizer, data)
-            txt_predictions_user = tokenizer.batch_decode(tokenized_predictions, skip_special_tokens=True)
-
+            tokenized_predictions_user, txt_labels_user = get_adapter_predictions(opts, user_model, tokenizer, data)
+            txt_predictions_user = tokenizer.batch_decode(tokenized_predictions_user, skip_special_tokens=True)
+            
+            tokenized_predictions += tokenized_predictions_user
             txt_labels += txt_labels_user
             txt_predictions += txt_predictions_user
             
