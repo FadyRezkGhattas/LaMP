@@ -134,6 +134,7 @@ if __name__ == '__main__':
     user_ids = []
     with tqdm(total=len(users), desc='Processing Users') as pbar:
         for user_id in users:
+            user_ids.append(user_id)
             user_model = load_adapter(original_model, os.path.join(opts.model_zoo_addr, 'ckpts', f'user_{user_id}')).to('cuda')
             # Get support performance
             data = GeneralSeq2SeqProfileDataset(task, prompt_generator, val=False, data=user_data[user_id], truncate_profile_size=opts.truncate_profile_size, training_ratio=opts.profile_training_ratio)
