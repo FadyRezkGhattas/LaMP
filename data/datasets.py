@@ -4,6 +4,7 @@ import datasets
 import math
 import torch
 from tqdm import tqdm
+from copy import deepcopy
 
 def get_all_labels(task):
     if task == "LaMP-1":
@@ -183,9 +184,9 @@ class GeneralSeq2SeqProfileDataset(Dataset):
             assert user_id is not None, "User id must be provided when using data_addr."
             with open(data_addr) as f:
                 data = json.load(f)
-            self.data = data[user_id]
+            self.data = deepcopy(data[user_id])
         elif data is not None:
-            self.data = data
+            self.data = deepcopy(data)
         self.i_key, self.o_key = get_io_keys(self.task)
         
         self.split_profile()
