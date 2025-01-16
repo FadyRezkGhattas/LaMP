@@ -50,7 +50,7 @@ parser.add_argument("--algorithm", type=str, choices=['zoo_selection', 'lora_hub
 parser.add_argument("--lmdb_addr", type=str, default='lmdb_data/LaMP-3-final')
 
 def get_adapter_metrics(opts, user_model, tokenizer, data, compute_metrics):
-    collator = DataCollatorForSeq2Seq(tokenizer = tokenizer, model = original_model)
+    collator = DataCollatorForSeq2Seq(tokenizer = tokenizer, model = user_model)
     training_args = Seq2SeqTrainingArguments(
             # trainer basics
             output_dir=opts.results_addr,
@@ -180,24 +180,19 @@ if __name__ == '__main__':
     elif opts.algorithm == 'ckpts':
         model_zoo = None
         
-    tokenized_predictions = []
-    txt_predictions = []
-    txt_labels = []
-    user_ids = []
     num_users = len(user_data)
     with tqdm(total=num_users, desc='Processing Users') as pbar:
         for user_id in range(num_users):
-            user_ids.append(user_id)
-            # figure out the method, and use different methods
+            # figure out the method, and use appropriate loading strategy
             user_model = load_adapter_based_on_method(user_id, original_model, model_zoo, opts)
 
             # Get support performance
-            data = GeneralSeq2SeqProfileDataset(task, prompt_generator, val=False, data=user_data[user_id], truncate_profile_size=opts.truncate_profile_size, training_ratio=opts.profile_training_ratio)
+            data = GeneralSeq2SeqProfileDataset(task, prompt_generator, val=False, data=user_data[user_id], truncate_profile_size=opts.truncate_profile_size)
             data = convert_to_hf_dataset(data, cache_dir = opts.cache_dir).map(create_preprocessor(tokenizer = tokenizer, max_length = tokenizer.model_max_length), batched=True)
             support_results = get_adapter_metrics(opts, user_model, tokenizer, data, compute_metrics)
 
             # Get query performance
-            data = GeneralSeq2SeqProfileDataset(task, prompt_generator, val=True, data=user_data[user_id], truncate_profile_size=opts.truncate_profile_size, training_ratio=opts.profile_training_ratio)
+            data = GeneralSeq2SeqProfileDataset(task, prompt_generator, val=True, data=user_data[user_id], truncate_profile_size=opts.truncate_profile_size)
             
             if not os.path.exists(log_files_pth):
                 os.makedirs(log_files_pth)
