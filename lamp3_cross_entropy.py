@@ -191,6 +191,7 @@ if __name__ == '__main__':
         writer=None, reconstruct_config=reconstr_config, skip_svd=True
         )
     original_model.print_trainable_parameters()
+    original_model.to('cuda')
 
     print("loading Dataset")
     # Load all users data    
