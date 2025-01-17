@@ -231,12 +231,12 @@ if __name__ == '__main__':
             dataloader = DataLoader(data, batch_size=opts.per_device_batch_size, collate_fn=collate_fn, drop_last=False)
             query_results = get_adapter_metrics(user_model, dataloader, lamp3_vocab_indices, tokenizer)
             
-            # if not os.path.exists(log_files_pth):
-            #     os.makedirs(log_files_pth)
-            # with open(os.path.join(log_files_pth, f'user_{user_id}.json'), 'w') as file:
-            #     json.dump({
-            #         'support_metric': support_results,
-            #         'query_metric': query_results
-            #     }, file, indent = 4)
+            if not os.path.exists(log_files_pth):
+                os.makedirs(log_files_pth)
+            with open(os.path.join(log_files_pth, f'user_{user_id}.json'), 'w') as file:
+                json.dump({
+                    'support_metric': support_results,
+                    'query_metric': query_results
+                }, file, indent = 4)
 
             pbar.update(1)
