@@ -76,6 +76,7 @@ def get_adapter_metrics(user_model, dataloader, lamp3_vocab_indices, tokenizer):
         indices = [1, 0, 2]
         print(x[indices]) would produce tensor([20., 10., 30.])
     '''
+    losses = torch.tensor([]).to('cuda')
     for i, batch in enumerate(dataloader):
         input_ids, labels = batch['input_ids'], batch['labels']
         input_ids = input_ids.to('cuda')
@@ -89,9 +90,12 @@ def get_adapter_metrics(user_model, dataloader, lamp3_vocab_indices, tokenizer):
         labels_decoded = tokenizer.batch_decode(labels[:,0])
         labels_decoded = torch.tensor([int(x)-1 for x in labels_decoded]).to('cuda')
         labels_one_hot_encoded = F.one_hot(labels_decoded, num_classes=5)
-        # ce = torch.nn.functional.cross_entropy(logits_lamp3, labels_decoded, reduction='none')
-        # ce.append(ces)
-    return 0
+        
+        # compute loss per sample: sum(abs(softmax(logits)-one hot encoded labels))/2
+        loss = torch.abs(F.softmax(logits_lamp3, dim=1)-labels_one_hot_encoded).sum(dim=1)/2
+        losses = torch.concat((losses, loss))
+
+    return losses.mean().cpu().item()
 
 
 
