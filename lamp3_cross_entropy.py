@@ -8,6 +8,7 @@ import yaml
 import json
 import argparse
 from tqdm import tqdm
+from functools import partial
 
 import numpy as np
 import torch
@@ -24,9 +25,10 @@ from transformers import (
 from data.lmdb import LMDBDataset
 from metrics.utils import get_metrics
 from load_adapters import load_adapter, tensorize_loraxs_adapter
-from data.datasets import GeneralSeq2SeqProfileDataset, create_preprocessor, convert_to_hf_dataset
+from data.datasets import GeneralSeq2SeqProfileDataset
 from lora_xs.initialization_utils import find_and_initialize
 from prompts.singular_prompts import create_prompt_generator
+from torch.utils.data import DataLoader
 
 
 parser = argparse.ArgumentParser()
@@ -49,29 +51,49 @@ parser.add_argument("--algorithm", type=str, choices=['zoo_selection', 'lora_hub
 # the lmdb data used if algorithm is zoo_selection
 parser.add_argument("--lmdb_addr", type=str, default='lmdb_data/LaMP-3-final')
 
-def get_adapter_metrics(opts, user_model, tokenizer, data, compute_metrics):
-    collator = DataCollatorForSeq2Seq(tokenizer = tokenizer, model = user_model)
-    training_args = Seq2SeqTrainingArguments(
-            # trainer basics
-            output_dir=opts.results_addr,
-            do_train = True,
-            do_eval = True,
-            # parallelization args
-            per_device_eval_batch_size = opts.per_device_batch_size,
-            # generation args
-            generation_num_beams = opts.generation_num_beams,
-            predict_with_generate = True,
-            generation_max_length = opts.generation_max_length,
-        )
-    trainer = Seq2SeqTrainer(
-        model = user_model,
-        args = training_args,
-        data_collator = collator,
-        eval_dataset = data,
-        tokenizer = tokenizer,
-        compute_metrics = compute_metrics
-    )
-    return trainer.evaluate(metric_key_prefix='support')
+def get_lamp3_labels_vocab_indices(tokenizer):
+    vocab_indices_of_token = []
+    for i in range(1, 6):
+        # get the token representation of the digit
+        token = tokenizer.tokenize(str(i))
+        assert len(token) == 1
+        token = token[0]
+        
+        # retrieve the index of the token representation in the vocab
+        vocab_index_of_token = tokenizer.vocab[token]
+
+        vocab_indices_of_token.append(vocab_index_of_token)
+    return vocab_indices_of_token
+
+@torch.no_grad()
+def get_adapter_metrics(user_model, dataloader, lamp3_vocab_indices, tokenizer):
+    '''
+        lamp3_vocab_indices is a correspondence to [1,2,3,4,5] -> [209, 204, 220, 314, 305]
+        assumed to be produced by get_lamp3_labels_vocab_indices
+        when indexing using this, we get the correct logit corresponding to each label.
+        for example:
+        x = torch.tensor([10., 20., 30., 40., 50., 60.])
+        indices = [1, 0, 2]
+        print(x[indices]) would produce tensor([20., 10., 30.])
+    '''
+    for i, batch in enumerate(dataloader):
+        input_ids, labels = batch['input_ids'], batch['labels']
+        input_ids = input_ids.to('cuda')
+        labels = labels.to('cuda')
+        logits = user_model(input_ids=input_ids, labels=labels).logits
+        # grab the first generated token and subset over the tokens in the lamp3 token.
+        # this converts the generation to a classification problem
+        logits_lamp3 = logits[:, 1, lamp3_vocab_indices]
+        # the labels have [lamp3 digit token, </s>]. get the int representaiton
+        labels = labels[:,0, None]
+        labels_decoded = tokenizer.batch_decode(labels[:,0])
+        labels_decoded = torch.tensor([int(x)-1 for x in labels_decoded]).to('cuda')
+        labels_one_hot_encoded = F.one_hot(labels_decoded, num_classes=5)
+        # ce = torch.nn.functional.cross_entropy(logits_lamp3, labels_decoded, reduction='none')
+        # ce.append(ces)
+    return 0
+
+
 
 def get_user_json_results(opts, user_id):
     user_log = f'user_{user_id}.json'
@@ -125,6 +147,12 @@ def load_adapter_based_on_method(user_id, original_model, model_zoo, opts):
     
     else:
         raise ValueError(f'Got {opts.algorithm} but should be in [zoo_selection, lora_hub, ckpts]')
+
+def preprocess_dataset(examples, tokenizer, max_length):
+    inputs = [example["source"] for example in examples]
+    targets = [example["target"] for example in examples]
+    model_inputs = tokenizer(inputs, text_target=targets, max_length=max_length, truncation=True, return_tensors="pt", padding=True)
+    return model_inputs
 
 if __name__ == '__main__':
     opts = parser.parse_args()
@@ -181,6 +209,9 @@ if __name__ == '__main__':
         model_zoo = None
         
     num_users = len(user_data)
+    collate_fn=partial(preprocess_dataset, tokenizer = tokenizer, max_length = tokenizer.model_max_length)
+
+    lamp3_vocab_indices = get_lamp3_labels_vocab_indices(tokenizer)
     with tqdm(total=num_users, desc='Processing Users') as pbar:
         for user_id in range(num_users):
             # figure out the method, and use appropriate loading strategy
@@ -188,15 +219,20 @@ if __name__ == '__main__':
 
             # Get support performance
             data = GeneralSeq2SeqProfileDataset(task, prompt_generator, val=False, data=user_data[user_id], truncate_profile_size=opts.truncate_profile_size)
-            data = convert_to_hf_dataset(data, cache_dir = opts.cache_dir).map(create_preprocessor(tokenizer = tokenizer, max_length = tokenizer.model_max_length), batched=True)
-            support_results = get_adapter_metrics(opts, user_model, tokenizer, data, compute_metrics)
+            dataloader = DataLoader(data, batch_size=opts.per_device_batch_size, collate_fn=collate_fn, drop_last=False)
+            support_results = get_adapter_metrics(user_model, dataloader, lamp3_vocab_indices, tokenizer)
 
             # Get query performance
             data = GeneralSeq2SeqProfileDataset(task, prompt_generator, val=True, data=user_data[user_id], truncate_profile_size=opts.truncate_profile_size)
+            dataloader = DataLoader(data, batch_size=opts.per_device_batch_size, collate_fn=collate_fn, drop_last=False)
+            query_results = get_adapter_metrics(user_model, dataloader, lamp3_vocab_indices, tokenizer)
             
-            if not os.path.exists(log_files_pth):
-                os.makedirs(log_files_pth)
+            # if not os.path.exists(log_files_pth):
+            #     os.makedirs(log_files_pth)
             # with open(os.path.join(log_files_pth, f'user_{user_id}.json'), 'w') as file:
-            #     json.dump({}, file, indent = 4)
+            #     json.dump({
+            #         'support_metric': support_results,
+            #         'query_metric': query_results
+            #     }, file, indent = 4)
 
             pbar.update(1)
