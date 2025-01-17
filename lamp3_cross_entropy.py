@@ -82,13 +82,13 @@ def get_adapter_metrics(user_model, dataloader, lamp3_vocab_indices, tokenizer):
         input_ids = input_ids.to('cuda')
         labels = labels.to('cuda')
         logits = user_model(input_ids=input_ids, labels=labels).logits
-        # grab the first generated token and subset over the tokens in the lamp3 token.
+        # grab the logits of the first generated token and subset over lamp3 generation vocab [1..5].
         # this converts the generation to a classification problem
         logits_lamp3 = logits[:, 1, lamp3_vocab_indices]
         # the labels have [lamp3 digit token, </s>]. get the int representaiton
         labels = labels[:,0, None]
-        labels_decoded = tokenizer.batch_decode(labels[:,0])
-        labels_decoded = torch.tensor([int(x)-1 for x in labels_decoded]).to('cuda')
+        labels_decoded = tokenizer.batch_decode(labels[:,0]) # all tokenized digits 1..5 get [digit token, </s>] so we skip the drop the second axis
+        labels_decoded = torch.tensor([int(x)-1 for x in labels_decoded]).to('cuda') # convert text digits to int and starting counting from 0
         labels_one_hot_encoded = F.one_hot(labels_decoded, num_classes=5)
         
         # compute loss per sample: sum(abs(softmax(logits)-one hot encoded labels))/2
