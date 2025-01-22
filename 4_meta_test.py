@@ -233,7 +233,8 @@ if __name__ == '__main__':
         # get accuracies on best 15 adapters. predictions are generated with greedy sampling
         best_15_adapters_accuracies = eval_adapters_accuracies_user_(best_adapters_idx=best_15_adapters_idx, profile_data=profile_data, generation_num_beams=1)
         # Get beam searched prediction on best adapter of the shortlisted 15
-        best_adapter_id = best_15_adapters_idx[np.argmax(best_15_adapters_accuracies)]
+        min_or_max_select_fn = np.argmax if greater_is_better else np.argmin
+        best_adapter_id = best_15_adapters_idx[min_or_max_select_fn(best_15_adapters_accuracies)]
         tokenized_prediction = get_best_adapter_prediction_(adapter_id=best_adapter_id, query_data=query_data)
         t1 = time.time()
 
