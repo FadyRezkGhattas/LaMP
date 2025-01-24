@@ -85,6 +85,8 @@ def get_adapter_predictions(opts, user_model, tokenizer, data):
 if __name__ == '__main__':
     opts = parser.parse_args()
     log_files_pth = os.path.join(opts.model_zoo_addr, 'per_user')
+    with open(os.path.join(opts.model_zoo_addr, "evaluate_adapters_hyperparameters.json"), 'w') as f:
+        json.dump(vars(opts), f)
 
     print("Loading Model")
     original_model = AutoModelForSeq2SeqLM.from_pretrained(opts.model_name)
